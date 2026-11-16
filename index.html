@@ -84,6 +84,19 @@ th{font-size:10.5px;color:var(--mut);text-transform:uppercase;font-weight:600;le
 .rolo select,.rolo input{padding:7px 8px;font-size:14px}
 .rolo .x{border:0;background:none;color:var(--bad);font-size:20px}
 .tot{font:800 26px var(--serif);color:var(--acc)}
+#cam{position:fixed;inset:0;background:#000;z-index:60;display:flex;flex-direction:column}
+#cam video{flex:1;width:100%;object-fit:cover;min-height:0}
+#cam .camtop{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:calc(12px + env(safe-area-inset-top)) 14px 12px;background:linear-gradient(rgba(0,0,0,.7),transparent);color:#fff;font-weight:600}
+#cam .camtop button{background:var(--acc);color:var(--acc-ink);border:0;border-radius:8px;padding:10px 16px;font:inherit;font-weight:700;text-transform:uppercase;letter-spacing:1px}
+#cam .cambar{background:#0c0b0a;border-top:1px solid var(--acc);padding:10px 12px calc(16px + env(safe-area-inset-bottom));display:flex;flex-direction:column;align-items:center;gap:10px}
+#camthumbs{display:flex;gap:6px;overflow-x:auto;width:100%;min-height:52px}
+#camthumbs div{position:relative;flex:none}
+#camthumbs img{width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid var(--line)}
+#camthumbs span{position:absolute;left:0;right:0;bottom:0;font-size:10px;text-align:center;background:rgba(0,0,0,.7);color:var(--acc);border-radius:0 0 6px 6px}
+.shutter{width:76px;height:76px;border-radius:50%;border:4px solid var(--acc);background:#ece4d4;box-shadow:0 0 0 4px #0c0b0a inset}
+.shutter:active{transform:scale(.92);background:var(--acc)}
+#cam .flash{position:absolute;inset:0;background:#fff;opacity:.7;pointer-events:none;animation:fl .25s forwards}
+@keyframes fl{to{opacity:0}}
 </style>
 </head>
 <body>
@@ -154,9 +167,9 @@ function vInicio(){
   const venc=c.aberto.filter(x=>x.dias<=3);
   const pct=Math.min(100,c.usado/c.limite*100);
   let h='';
-  venc.forEach(x=>h+=`<div class="card alert ${x.dias<0?'bad':''}"><b>${x.dias<0?'Vencido':'Vence '+(x.dias===0?'hoje':'em '+x.dias+' dia'+(x.dias>1?'s':''))}</b> · ${kg(x.restante)} da compra de ${dbr(x.data)} (${dbr(x.venc)})</div>`);
-  h+=`<div class="card"><div class="k">Crédito disponível</div><div class="big">${kg(c.disponivel)}</div><div class="bar"><i style="width:${pct}%"></i></div><div class="mut" style="font-size:13px">${kg(c.usado)} usados de ${kg(c.limite)}</div></div>`;
-  h+=`<div class="grid2"><div class="card"><div class="k">Estoque</div><div class="mid">${n0(D.inv.estoque.qtde)} rolos</div><div class="mut">${kg(D.inv.estoque.kg)}</div></div>
+  venc.forEach(x=>h+=`<div class="card alert ${x.dias<0?'bad':''}" onclick="ir('credito')"><b>${x.dias<0?'Nota vencida':'Nota vence '+(x.dias===0?'hoje':'em '+x.dias+' dia'+(x.dias>1?'s':''))}</b> · ${brl(x.valor)} (${dbr(x.venc)})</div>`);
+  h+=`<div class="card" onclick="ir('credito')"><div class="row sp"><div><div class="k">Crédito fornecedor · em aberto</div><div class="big">${brl(c.valorAberto)}</div></div><div style="text-align:right"><div class="k">Disponível</div><div class="mid">${kg(c.disponivel)}</div></div></div><div class="bar"><i style="width:${pct}%"></i></div><div class="mut" style="font-size:13px">${kg(c.usado)} usados de ${kg(c.limite)}</div></div>`;
+  h+=`<div class="grid2"><div class="card" onclick="ir('estoque')"><div class="k">Estoque livre</div><div class="mid">${n0(D.inv.estoque.qtde-comprometido().qtde)} rolos</div><div class="mut">${n0(D.inv.estoque.qtde)} total · ${n0(comprometido().qtde)} comprometidos</div></div>
   <div class="card"><div class="k">A entregar</div><div class="mid">${pend.length} pedidos</div><div class="mut">${n0(pend.reduce((s,x)=>s+x.qtdPedido,0))} rolos</div></div>
   <div class="card"><div class="k">A receber</div><div class="mid">${brl(rec)}</div></div>
   <div class="card"><div class="k">Vendido ${mesNome(m)}</div><div class="mid">${kg(vm.reduce((s,x)=>s+(x.kgEntregue||0),0))}</div>${D.user.dono?`<div style="color:var(--ok);font-weight:600">Lucro ${brl(vm.reduce((s,x)=>s+(x.lucro||0),0))}</div>`:''}</div></div>`;
@@ -164,7 +177,7 @@ function vInicio(){
   <button class="btn" style="margin:0" onclick="fPedido()">+ Pedido</button>
   <button class="btn" style="margin:0" onclick="fRetirada()">+ Retirada</button>
   <button class="btn sec" style="margin:0" onclick="fFornecedor()">Pedido fornecedor</button>
-  <button class="btn sec" style="margin:0" onclick="fCredito('Pagamento')">Pagar crédito</button></div></div>`;
+  <button class="btn sec" style="margin:0" onclick="ir('credito')">Crédito</button></div></div>`;
   if(pend.length){h+=`<div class="k" style="margin:14px 4px 6px">Aguardando entrega</div>`;pend.slice(0,6).forEach(x=>h+=itemV(x))}
   return h;
 }
@@ -226,7 +239,7 @@ function detV(i){
 
 /* ---- FORMULÁRIOS ---- */
 function open_(h){$('#modal').innerHTML=`<div class="sheet" onclick="if(event.target===this)close_()"><div>${h}<button class="btn sec" onclick="close_()">Fechar</button></div></div>`}
-function close_(){$('#modal').innerHTML=''}
+function close_(){fecharCamera();$('#modal').innerHTML=''}
 function coresInput(id,val){
   return `<div class="cores" id="${id}">${D.cores.map(k=>`<div class="cor"><span><i class="dot" style="background:${COR_HEX[k]}"></i>${k}</span><span class="step"><button type="button" onclick="stp(this,-1)">−</button><input inputmode="numeric" data-c="${k}" value="${val&&val[k]||''}" placeholder="0"><button type="button" onclick="stp(this,1)">+</button></span></div>`).join('')}</div>`;
 }
@@ -254,22 +267,47 @@ function fEntrega(i){
   const x=todas()[i];ROLOS=[];
   open_(`<h2>Entrega · ${esc(x.cliente)}</h2><p class="mut" style="margin:0">${esc(x.protocolo)} · pedido de ${n0(x.qtdPedido)} rolos</p>
   <div class="card" style="margin-top:12px"><div class="row sp"><div><div class="k">Etiquetas dos rolos</div><div class="mut" style="font-size:12px">Lê o peso líquido e a cor de cada foto</div></div>
-  <label class="btn" style="width:auto;margin:0;padding:10px 14px;cursor:pointer;color:var(--acc-ink)">📷 Fotos<input id="ffoto" type="file" accept="image/*" capture="environment" multiple style="display:none" onchange="addFotos(this.files,${i});this.value=''"></label></div>
+  <div class="row"><button class="btn" style="width:auto;margin:0;padding:10px 12px" onclick="abrirCamera(${i})">📷 Câmera</button><label class="btn sec" style="width:auto;margin:0;padding:10px 12px;cursor:pointer">🖼<input type="file" accept="image/*" multiple style="display:none" onchange="addFotos(this.files,${i});this.value=''"></label></div></div>
   <div class="rolos" id="frolos"></div><div id="ftot"></div></div>
   <label>Data da entrega</label><input id="fdt" type="date" value="${x.dataEntrega||hoje()}">
   <label>Rolos entregues por cor</label>${coresInput('fc',x.qtdEntregue?x.entregue:x.pedido)}
   <label>Quilos entregues (peso líquido)</label><input id="fkg" inputmode="decimal" value="${x.kgEntregue?String(x.kgEntregue).replace('.',','):''}" placeholder="ex: 191,41">
-  <button class="btn" onclick="acao('registrarEntrega',{aba:'${esc(x.aba)}',linha:${x.linha},data:val('fdt'),cores:lerCores('fc'),kg:num(val('fkg'))})">Salvar entrega</button>
+  <label>Data da nota do fornecedor (faturamento)</label><input id="fnf" type="date" value="${x.dataEntrega||hoje()}">
+  <div class="check"><input type="checkbox" id="fcr" ${x.dataEntrega?'':'checked'}> Lançar no crédito do fornecedor (vence em 15 dias)</div>
+  <button class="btn" onclick="acao('registrarEntrega',{aba:'${esc(x.aba)}',linha:${x.linha},data:val('fdt'),dataNF:val('fnf'),credito:$('#fcr').checked,cores:lerCores('fc'),kg:num(val('fkg'))})">Salvar entrega</button>
   <button class="btn wa" onclick="whats(${i})">Enviar total no WhatsApp</button>`);
 }
 function reduzir(file){return new Promise((res,rej)=>{const img=new Image();img.onload=()=>{const M=1600,sc=Math.min(1,M/Math.max(img.width,img.height));const c=document.createElement('canvas');c.width=Math.round(img.width*sc);c.height=Math.round(img.height*sc);c.getContext('2d').drawImage(img,0,0,c.width,c.height);const thumb=(()=>{const t=document.createElement('canvas');const s2=96/Math.max(c.width,c.height);t.width=c.width*s2;t.height=c.height*s2;t.getContext('2d').drawImage(c,0,0,t.width,t.height);return t.toDataURL('image/jpeg',.7)})();res({b64:c.toDataURL('image/jpeg',.82).split(',')[1],thumb});URL.revokeObjectURL(img.src)};img.onerror=rej;img.src=URL.createObjectURL(file)})}
-async function addFotos(files,i){
-  const lst=[...files];
-  for(const f of lst){const r={id:Math.random(),thumb:'',kg:'',cor:'',st:'lendo'};ROLOS.push(r);desenhaRolos(i);
-    try{const z=await reduzir(f);r.thumb=z.thumb;desenhaRolos(i);const res=await post('ocr',{img:z.b64});r.kg=res.r.kg||'';r.cor=res.r.cor||'';r.st=r.kg?'ok':'ver';r.txt=res.r.texto||''}
-    catch(e){r.st='erro';r.err=e.message}
-    desenhaRolos(i)}
+async function lerRolo(z,i){const r={thumb:z.thumb,kg:'',cor:'',st:'lendo'};ROLOS.push(r);desenhaRolos(i);
+  try{const res=await post('ocr',{img:z.b64});r.kg=res.r.kg||'';r.cor=res.r.cor||'';r.st=r.kg?'ok':'ver';r.txt=res.r.texto||''}catch(e){r.st='erro';r.err=e.message}
+  desenhaRolos(i);camThumbs()}
+async function addFotos(files,i){for(const f of [...files]){try{lerRolo(await reduzir(f),i)}catch(e){toast('Foto inválida')}}}
+let CAM=null;
+async function abrirCamera(i){
+  fecharCamera();
+  const ov=document.createElement('div');ov.id='cam';
+  ov.innerHTML=`<video playsinline autoplay muted></video><div class="camtop"><span id="camn">Aponte para a etiqueta</span><button onclick="fecharCamera()">Concluir</button></div><div class="cambar"><div id="camthumbs"></div><button class="shutter" aria-label="Tirar foto" onclick="clique(${i})"></button></div>`;
+  document.body.appendChild(ov);camThumbs();
+  try{CAM=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1440}},audio:false});ov.querySelector('video').srcObject=CAM}
+  catch(e){fecharCamera();toast('Não consegui abrir a câmera. Use o botão 🖼.')}
 }
+function clique(i){
+  const v=$('#cam video');if(!v||!v.videoWidth)return;
+  const M=1600,sc=Math.min(1,M/Math.max(v.videoWidth,v.videoHeight));
+  const c=document.createElement('canvas');c.width=Math.round(v.videoWidth*sc);c.height=Math.round(v.videoHeight*sc);c.getContext('2d').drawImage(v,0,0,c.width,c.height);
+  const t=document.createElement('canvas'),s2=96/Math.max(c.width,c.height);t.width=c.width*s2;t.height=c.height*s2;t.getContext('2d').drawImage(c,0,0,t.width,t.height);
+  const f=document.createElement('div');f.className='flash';$('#cam').appendChild(f);setTimeout(()=>f.remove(),300);
+  if(navigator.vibrate)navigator.vibrate(30);
+  lerRolo({b64:c.toDataURL('image/jpeg',.85).split(',')[1],thumb:t.toDataURL('image/jpeg',.7)},i);
+}
+function camThumbs(){
+  const el=$('#camthumbs');if(!el)return;
+  const tot=ROLOS.filter(r=>+r.kg>0).reduce((s,r)=>s+ +r.kg,0);
+  $('#camn').textContent=ROLOS.length?`${ROLOS.length} foto${ROLOS.length>1?'s':''} · ${kg(tot)}`:'Aponte para a etiqueta';
+  el.innerHTML=ROLOS.map(r=>`<div>${r.thumb?`<img src="${r.thumb}">`:''}<span>${r.st==='lendo'?'…':r.kg?String(r.kg).replace('.',','):'?'}</span></div>`).join('');
+  el.scrollLeft=el.scrollWidth;
+}
+function fecharCamera(){if(CAM){CAM.getTracks().forEach(t=>t.stop());CAM=null}const o=$('#cam');if(o)o.remove()}
 function desenhaRolos(i){
   const el=$('#frolos');if(!el)return;
   el.innerHTML=ROLOS.map((r,j)=>`<div class="rolo">${r.thumb?`<img src="${r.thumb}">`:'<div></div>'}
@@ -317,10 +355,17 @@ function sRet(linha){const c=val('fcli').trim();if(!c)return toast('Informe o cl
   acao('novaRetirada',{linha,cliente:c,data:val('fdt'),cores,kg:num(val('fkg')),precoKg:num(val('fpk'))})}
 
 /* ---- ESTOQUE ---- */
+function comprometido(){const o={};let q=0,n=0;D.vendas.filter(x=>!x.dataEntrega).forEach(x=>{n++;for(const k in x.pedido){o[k]=(o[k]||0)+x.pedido[k];q+=x.pedido[k]}});return{cores:o,qtde:q,pedidos:n}}
 function vEstoque(){
-  const e=D.inv.estoque;
-  let h=`<div class="card row sp"><div><div class="k">Estoque ${esc(D.inv.aba)}</div><div class="big">${n0(e.qtde)} rolos</div></div><div class="mid">${kg(e.kg)}</div></div><div class="estq">`;
-  D.cores.filter(k=>k in e.cores).forEach(k=>h+=`<div><span class="dot" style="background:${COR_HEX[k]}"></span><b style="${e.cores[k]<=0?'color:var(--bad)':''}">${e.cores[k]}</b><span class="mut" style="font-size:12px">${k}</span></div>`);
+  const e=D.inv.estoque,cp=comprometido(),livreT=e.qtde-cp.qtde;
+  let h=`<div class="card"><div class="k">Estoque ${esc(D.inv.aba)}</div><div class="grid2" style="grid-template-columns:repeat(3,1fr);margin-top:8px;text-align:center">
+  <div><div class="k">Total</div><div class="mid">${n0(e.qtde)}</div></div>
+  <div><div class="k">Comprometido</div><div class="mid" style="color:var(--warn)">${n0(cp.qtde)}</div></div>
+  <div><div class="k">Livre</div><div class="mid" style="color:${livreT<0?'var(--bad)':'var(--ok)'}">${n0(livreT)}</div></div></div>
+  <div class="mut" style="font-size:12px;margin-top:8px;text-align:center">${kg(e.kg)} em estoque · comprometido = ${cp.pedidos} pedido${cp.pedidos!==1?'s':''} ainda não entregue${cp.pedidos!==1?'s':''}</div></div>
+  <div class="card"><table><tr><th>Cor</th><th>Total</th><th>Compr.</th><th>Livre</th></tr>`;
+  D.cores.filter(k=>(k in e.cores)||cp.cores[k]).forEach(k=>{const t=e.cores[k]||0,c=cp.cores[k]||0,l=t-c;h+=`<tr><td><span class="dot" style="background:${COR_HEX[k]}"></span> ${k}</td><td>${t}</td><td style="color:var(--warn)">${c||'—'}</td><td style="font-weight:700;color:${l<0?'var(--bad)':'var(--ink)'}">${l}</td></tr>`});
+  h+=`</table>`;
   h+=`</div><div class="grid2" style="margin-top:10px"><button class="btn" style="margin:0" onclick="fRetirada()">+ Retirada</button><button class="btn sec" style="margin:0" onclick="fFornecedor()">+ Pedido fornecedor</button></div>`;
   const ab=D.inv.pedidos.filter(p=>!p.dataEntrega);
   h+=`<div class="k" style="margin:16px 4px 6px">Pedidos ao fornecedor</div>`;
@@ -344,30 +389,29 @@ function fReceber(i){
   <label>Data que chegou</label><input id="fdt" type="date" value="${p.dataEntrega||hoje()}">
   <label>Rolos recebidos por cor</label>${coresInput('fc',p.qtdEntregue?p.entregue:p.pedido)}
   <label>Quilos recebidos (nota)</label><input id="fkg" inputmode="decimal" value="${p.kgEntregue||''}">
-  <div class="check"><input type="checkbox" id="fcr" ${p.dataEntrega?'':'checked'}> Lançar no crédito (prazo de pagamento)</div>
-  <button class="btn" onclick="acao('receberFornecedor',{linha:${p.linha},data:val('fdt'),cores:lerCores('fc'),kg:num(val('fkg')),preco:${p.preco||0},credito:$('#fcr').checked})">Salvar chegada</button>`);
+  <label>Data da nota (faturamento)</label><input id="fnf" type="date" value="${p.dataEntrega||hoje()}">
+  <div class="check"><input type="checkbox" id="fcr" ${p.dataEntrega?'':'checked'}> Lançar no crédito (vence em 15 dias)</div>
+  <button class="btn" onclick="acao('receberFornecedor',{linha:${p.linha},data:val('fdt'),dataNF:val('fnf'),cores:lerCores('fc'),kg:num(val('fkg')),preco:${p.preco||0},credito:$('#fcr').checked})">Salvar chegada</button>`);
 }
 
 /* ---- CRÉDITO ---- */
 function vCredito(){
   const c=D.credito,pct=Math.min(100,c.usado/c.limite*100);
-  let h=`<div class="card"><div class="k">Disponível</div><div class="big">${kg(c.disponivel)}</div><div class="bar"><i style="width:${pct}%"></i></div><div class="row sp mut" style="font-size:13px"><span>Em aberto ${kg(c.usado)}</span><span>Limite ${kg(c.limite)}</span></div></div>
-  <div class="grid2"><button class="btn" style="margin:0" onclick="fCredito('Pagamento')">Lançar pagamento</button><button class="btn sec" style="margin:0" onclick="fCredito('Compra')">Lançar compra</button></div>
-  <div class="k" style="margin:16px 4px 6px">Compras em aberto</div>`;
-  c.aberto.slice().sort((a,b)=>a.venc<b.venc?-1:1).forEach(x=>{const cl=x.dias<0?'bad':x.dias<=3?'warn':'';h+=`<div class="card ${cl?'alert '+cl:''}"><div class="row sp"><b>${kg(x.restante)}</b><span class="pill ${cl||'pe'}">${x.dias<0?'Vencido há '+(-x.dias)+'d':'Vence '+dbr(x.venc)+' ('+x.dias+'d)'}</span></div><div class="mut" style="font-size:13px">Compra ${dbr(x.data)} de ${kg(x.kg)}${D.user.dono?' · ≈ '+brl(x.valor):''}</div></div>`});
-  if(!c.aberto.length)h+='<p class="mut">Nada em aberto.</p>';
-  h+=`<div class="k" style="margin:16px 4px 6px">Lançamentos</div><div class="card"><table><tr><th>Data</th><th>Tipo</th><th>Kg</th>${D.user.dono?'<th>Valor</th>':''}</tr>${c.lanc.map(l=>`<tr><td>${dbr(l.data)}</td><td>${esc(l.tipo)}</td><td>${n0(l.kg)}</td>${D.user.dono?`<td>${brl(l.valor)}</td>`:''}</tr>`).join('')}</table></div>`;
+  let h=`<div class="card"><div class="row sp"><div><div class="k">Em aberto</div><div class="big">${brl(c.valorAberto)}</div></div><div style="text-align:right"><div class="k">Disponível</div><div class="mid">${kg(c.disponivel)}</div></div></div><div class="bar"><i style="width:${pct}%"></i></div><div class="row sp mut" style="font-size:13px"><span>Usado ${kg(c.usado)}</span><span>Limite ${kg(c.limite)}</span></div></div>
+  <button class="btn sec" style="margin:0 0 6px" onclick="fCredito()">+ Lançar nota no crédito</button>
+  <div class="k" style="margin:16px 4px 6px">Notas em aberto · prazo 15 dias</div>`;
+  c.aberto.slice().sort((a,b)=>a.venc<b.venc?-1:1).forEach(x=>{const cl=x.dias<0?'bad':x.dias<=3?'warn':'';h+=`<div class="card ${cl?'alert '+cl:''}"><div class="row sp"><b style="font:800 20px var(--serif)">${brl(x.valor)}</b><span class="pill ${cl||'pe'}">${x.dias<0?'Vencida há '+(-x.dias)+'d':x.dias===0?'Vence hoje':'Vence '+dbr(x.venc)+' · '+x.dias+'d'}</span></div><div class="mut" style="font-size:13px;margin:4px 0 2px">Nota de ${dbr(x.data)} · ${kg(x.restante)}${x.obs?' · '+esc(x.obs):''}</div><button class="btn" style="margin-top:10px;padding:10px" onclick="if(confirm('Marcar nota de ${brl(x.valor)} como paga?'))acao('pagarNota',{linha:${x.linha},pago:true},false)">Marcar como paga</button></div>`});
+  if(!c.aberto.length)h+='<p class="mut">Nenhuma nota em aberto.</p>';
+  h+=`<div class="k" style="margin:16px 4px 6px">Histórico</div><div class="card"><table><tr><th>Nota</th><th>Valor</th><th>Venc.</th><th></th></tr>${c.lanc.map(l=>`<tr><td>${dbr(l.data)}</td><td>${brl(l.valor)}</td><td>${dbr(l.venc)}</td><td>${l.pago?`<span class="pill ok">Paga</span>`:/pagamento/i.test(l.tipo)?`<span class="pill">Pagto</span>`:`<span class="pill warn">Aberta</span>`}</td></tr>`).join('')}</table></div>`;
   return h;
 }
-function fCredito(tipo){
-  const sug=tipo==='Pagamento'&&D.credito.aberto[0]?D.credito.aberto[0].restante:'';
-  open_(`<h2>${tipo==='Pagamento'?'Pagamento ao fornecedor':'Compra no crédito'}</h2>
-  <p class="mut">${tipo==='Pagamento'?'Cada kg pago libera o mesmo kg de crédito. O pagamento abate as compras mais antigas primeiro.':'Use só se a compra não foi lançada pela chegada no Estoque.'}</p>
-  <label>Data</label><input id="fdt" type="date" value="${hoje()}">
-  <div class="grid2"><div><label>Quilos</label><input id="fkg" inputmode="decimal" value="${sug?String(Math.round(sug*100)/100).replace('.',','):''}"></div><div><label>Valor (R$)</label><input id="fvl" inputmode="decimal" placeholder="opcional"></div></div>
-  <label>Observação</label><input id="fob">
-  <button class="btn" onclick="acao('lancarCredito',{tipo:'${tipo}',data:val('fdt'),kg:num(val('fkg')),valor:num(val('fvl')),obs:val('fob')})">Salvar</button>`);
-  const cus=D.padrao.custoKg;if(cus){const u=()=>$('#fvl').placeholder=brl(num(val('fkg'))*cus);$('#fkg').addEventListener('input',u);u()}
+function fCredito(){
+  open_(`<h2>Nota no crédito</h2>
+  <p class="mut">Use para notas que não vieram de uma entrega ou chegada lançada no app. Vence 15 dias depois da data da nota.</p>
+  <label>Data da nota (faturamento)</label><input id="fdt" type="date" value="${hoje()}">
+  <div class="grid2"><div><label>Valor da nota (R$)</label><input id="fvl" inputmode="decimal"></div><div><label>Quilos</label><input id="fkg" inputmode="decimal" placeholder="automático"></div></div>
+  <label>Observação</label><input id="fob" placeholder="ex: nº da nota">
+  <button class="btn" onclick="acao('lancarCredito',{tipo:'Compra',data:val('fdt'),kg:num(val('fkg')),valor:num(val('fvl')),obs:val('fob')})">Salvar nota</button>`);
 }
 
 /* ---- RELATÓRIOS ---- */
