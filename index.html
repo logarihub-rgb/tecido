@@ -162,7 +162,7 @@ function aReceber(x){if(x.pago)return 0;const v=x.tipo==='pronta'?x.valorReal:(x
 /* ---- INÍCIO ---- */
 function vInicio(){
   const c=D.credito,m=ultimoMes(),vm=todas().filter(x=>x.mes===m);
-  const pend=D.vendas.filter(x=>!x.dataEntrega);
+  const pend=pendentes();
   const rec=todas().reduce((s,x)=>s+aReceber(x),0);
   const venc=c.aberto.filter(x=>x.dias<=3);
   const pct=Math.min(100,c.usado/c.limite*100);
@@ -355,7 +355,9 @@ function sRet(linha){const c=val('fcli').trim();if(!c)return toast('Informe o cl
   acao('novaRetirada',{linha,cliente:c,data:val('fdt'),cores,kg:num(val('fkg')),precoKg:num(val('fpk'))})}
 
 /* ---- ESTOQUE ---- */
-function comprometido(){const o={};let q=0,n=0;D.vendas.filter(x=>!x.dataEntrega).forEach(x=>{n++;for(const k in x.pedido){o[k]=(o[k]||0)+x.pedido[k];q+=x.pedido[k]}});return{cores:o,qtde:q,pedidos:n}}
+const INTERNO=/^(LOGARI|INVENT[AÁ]RIO)$/i;
+function pendentes(){return D.vendas.filter(x=>!x.dataEntrega&&x.qtdPedido>0&&!INTERNO.test(x.cliente))}
+function comprometido(){const o={};let q=0,n=0;pendentes().forEach(x=>{n++;for(const k in x.pedido){o[k]=(o[k]||0)+x.pedido[k];q+=x.pedido[k]}});return{cores:o,qtde:q,pedidos:n}}
 function vEstoque(){
   const e=D.inv.estoque,cp=comprometido(),livreT=e.qtde-cp.qtde;
   let h=`<div class="card"><div class="k">Estoque ${esc(D.inv.aba)}</div><div class="grid2" style="grid-template-columns:repeat(3,1fr);margin-top:8px;text-align:center">
