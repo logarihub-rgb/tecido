@@ -374,13 +374,14 @@ function sEntrega(i){const x=todas()[i],p={aba:x.aba,linha:x.linha,data:val('fdt
   if(ROLOS.length){p.rolos=rolosOk();p.fotos=fotosOk()}acao('registrarEntrega',p)}
 function reduzir(file){return new Promise((res,rej)=>{const img=new Image();img.onload=()=>{const M=1600,sc=Math.min(1,M/Math.max(img.width,img.height));const c=document.createElement('canvas');c.width=Math.round(img.width*sc);c.height=Math.round(img.height*sc);c.getContext('2d').drawImage(img,0,0,c.width,c.height);const thumb=(()=>{const t=document.createElement('canvas');const s2=96/Math.max(c.width,c.height);t.width=c.width*s2;t.height=c.height*s2;t.getContext('2d').drawImage(c,0,0,t.width,t.height);return t.toDataURL('image/jpeg',.7)})();res({b64:c.toDataURL('image/jpeg',.82).split(',')[1],thumb});URL.revokeObjectURL(img.src)};img.onerror=rej;img.src=URL.createObjectURL(file)})}
 function lerRolo(z,i){ROLOS.push({thumb:z.thumb,b64:z.b64,kg:'',cor:'',st:'fila',tent:0});desenhaRolos(i);camThumbs();processaOCR(i)}
-let OCR_ON=false;
-async function processaOCR(i){if(OCR_ON)return;OCR_ON=true;let r;
+let OCR_ON=0;const OCR_MAX=3;
+function processaOCR(i){while(OCR_ON<OCR_MAX&&ROLOS.some(x=>x.st==='fila')){OCR_ON++;ocrWorker(i)}}
+async function ocrWorker(i){let r;
   while((r=ROLOS.find(x=>x.st==='fila'))){r.st='lendo';desenhaRolos(i);camThumbs();
     for(;;){r.tent++;try{const res=await post('ocr',{img:r.b64,foto:r.foto||''});const o=res.r||{};if(o.foto)r.foto=o.foto;if(o.cor&&!r.cor)r.cor=o.cor;if(o.kg){r.kg=o.kg;r.st='ok';break}throw new Error(o.erro||'Não achei o peso')}
-      catch(e){if(r.tent<3){await new Promise(z=>setTimeout(z,800));continue}r.st='ver';r.err=e.message;break}}
+      catch(e){if(r.tent<3){await new Promise(z=>setTimeout(z,800+Math.random()*700));continue}r.st='ver';r.err=e.message;break}}
     desenhaRolos(i);camThumbs()}
-  OCR_ON=false}
+  OCR_ON--}
 async function addFotos(files,i){for(const f of [...files]){try{lerRolo(await reduzir(f),i)}catch(e){toast('Foto inválida')}}}
 function verFoto(j){const r=ROLOS[j];if(!r||!r.b64)return;const d=document.createElement('div');d.id='fv';
   d.innerHTML=`<img src="data:image/jpeg;base64,${r.b64}"><div><input id="fvkg" inputmode="decimal" placeholder="Peso líquido (kg)" value="${r.kg?String(r.kg).replace('.',','):''}"><button class="btn" style="width:auto;margin:0" onclick="const v=num($('#fvkg').value);if(v){ROLOS[${j}].kg=v;ROLOS[${j}].st='ok'}history.back();desenhaRolos()">OK</button></div>`;
