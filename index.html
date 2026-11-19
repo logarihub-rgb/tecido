@@ -591,12 +591,15 @@ function fReceber(i,resto){
 
 function arquivoB64(file){return new Promise((ok,er)=>{const r=new FileReader();r.onload=()=>ok(String(r.result).split(',')[1]);r.onerror=er;r.readAsDataURL(file)})}
 function fotoB64(file){return new Promise((ok,er)=>{const img=new Image();img.onload=()=>{const M=2400,sc=Math.min(1,M/Math.max(img.width,img.height)),c=document.createElement('canvas');c.width=Math.round(img.width*sc);c.height=Math.round(img.height*sc);c.getContext('2d').drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(img.src);ok(c.toDataURL('image/jpeg',.9).split(',')[1])};img.onerror=er;img.src=URL.createObjectURL(file)})}
+function nfCores(r){const pc=r.porCor||{},ks=Object.keys(pc);if(!ks.length)return'';const kr=D.padrao.kgRolo||19.3,est={};ks.forEach(k=>est[k]=Math.max(1,Math.round(pc[k]/kr)));
+  const tot=Object.values(est).reduce((a,b)=>a+b,0);if(r.volumes&&tot===r.volumes&&!FRESTO)document.querySelectorAll('#fc input').forEach(i=>{i.value=est[i.dataset.c]||''});
+  return '<br>Por cor: '+ks.map(k=>est[k]+' '+k+' ('+kg(pc[k])+')').join(' · ')+(r.volumes&&tot!==r.volumes?' <span style="color:var(--warn)">— estimativa não fecha com '+r.volumes+' rolos, confira as cores</span>':'')}
 async function lerNF(file){if(!file)return;const pdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name);
   if(pdf&&file.size>8e6)return toast('PDF muito grande');
   $('#nfres').textContent='Lendo a nota…';
   try{const b64=pdf?await arquivoB64(file):await fotoB64(file);const r=(await call('lerNF',{b64,mime:pdf?'application/pdf':'image/jpeg'})).r;NFV=r;
     if(r.kg)$('#fkg').value=String(r.kg).replace('.',',');if(r.data)$('#fnf').value=r.data;
-    $('#nfres').innerHTML=(r.kg||r.data)?`<b style="color:var(--ok)">Nota lida${r.numero?' nº '+esc(r.numero):''}</b> · faturada ${dbr(r.data)} · ${r.kg?kg(r.kg):'kg ?'}${r.valor?' · '+brl(r.valor):''}${r.volumes?' · '+r.volumes+' volumes':''}<br>Confira antes de salvar.`:'<span style="color:var(--bad)">Não achei o peso nem a data. Digite abaixo.</span>';
+    $('#nfres').innerHTML=(r.kg||r.data)?`<b style="color:var(--ok)">Nota lida${r.numero?' nº '+esc(r.numero):''}</b> · faturada ${dbr(r.data)} · ${r.kg?kg(r.kg):'kg ?'}${r.valor?' · '+brl(r.valor):''}${r.volumes?' · '+r.volumes+' rolos':''}${r.venc?' · vence '+dbr(r.venc):''}${nfCores(r)}<br>Confira antes de salvar.`:'<span style="color:var(--bad)">Não achei o peso nem a data. Digite abaixo.</span>';
     FRUP()}
   catch(e){$('#nfres').innerHTML='<span style="color:var(--bad)">'+esc(e.message)+'. Digite os dados abaixo.</span>'}}
 
