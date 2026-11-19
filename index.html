@@ -426,7 +426,10 @@ function fNF(i){
 }
 function textoNF(){
   const x=todas()[NFX],cad=(D.cadastro||[]).find(c=>c.cliente.toLowerCase()===x.cliente.toLowerCase())||{},q=lerCores('fnf');
-  let tk=0,tv=0;const L=Object.entries(q).map(([c,n])=>{const kk=Math.round(kgMedio(x,c)*n*100)/100,vv=Math.round(kk*x.precoKg*100)/100;tk+=kk;tv+=vv;return `${n} ${c} — ${k2(kk)} KG — ${brl(vv)}`});
+  const E=Object.entries(q),kks=E.map(([c,n])=>Math.round(kgMedio(x,c)*n*100)/100);
+  const tudo=E.length&&E.every(([c,n])=>n===(x.entregue||{})[c])&&Object.keys(x.entregue||{}).filter(c=>x.entregue[c]).length===E.length;
+  if(tudo&&x.kgEntregue){const d=Math.round((x.kgEntregue-kks.reduce((a,b)=>a+b,0))*100)/100;if(Math.abs(d)<1)kks[kks.length-1]=Math.round((kks[kks.length-1]+d)*100)/100}
+  let tk=0,tv=0;const L=E.map(([c,n],j)=>{const kk=kks[j],vv=Math.round(kk*x.precoKg*100)/100;tk+=kk;tv+=vv;return `${n} ${c} — ${k2(kk)} KG — ${brl(vv)}`});
   let t=`Razão Social: ${cad.razao||x.cliente}\nCNPJ: ${cad.cnpj||'—'}\nInscrição Estadual: ${cad.ie||'—'}\n\nEndereço Completo\nCEP: ${cad.cep||'—'}\nCidade: ${[cad.cidade,cad.uf].filter(Boolean).join(' - ')||'—'}\nRua: ${cad.rua||'—'}${cad.bairro?'\nBairro: '+cad.bairro:''}\n\n`;
   t+=L.join('\n')+`\n------------------------------\nTOTAL — ${k2(Math.round(tk*100)/100)} KG — ${brl(Math.round(tv*100)/100)}\n\n(valor do kg ${k2(x.precoKg)})`;
   $('#nftxt').textContent=t;NFX_T={t,tv:Math.round(tv*100)/100};
