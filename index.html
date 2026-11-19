@@ -131,7 +131,7 @@ th{font-size:10.5px;color:var(--mut);text-transform:uppercase;font-weight:600;le
 <script>
 const COR_HEX={Preto:'#1d1d1d',Marrom:'#6b4226',Branco:'#f4f1ea',Marfim:'#efe6cf',Rubro:'#9b1c2c',Marinho:'#1f2f57',Rubi:'#b0124a',Canela:'#a5643a',Amarelo:'#e8c33a',Frozen:'#bcd7e6',Hera:'#e58fb5'};
 const MES=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-let PIN='',D=null,TAB='inicio',F={mes:'',cli:'',st:'todos',tipo:'todos'},R={mes:''};
+let PIN='',D=null,TAB='inicio',F={mes:'',cli:'',st:'aberto',tipo:'todos'},R={mes:''};
 const $=s=>document.querySelector(s);
 const brl=v=>(+v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const kg=v=>(+v||0).toLocaleString('pt-BR',{maximumFractionDigits:2})+' kg';
@@ -242,7 +242,7 @@ function statusV(x){
   if(x.tipo!=='pronta'&&!x.dataEntrega)return{t:'A entregar',c:'pe'};
   if(aReceber(x)>0.01)return{t:'A receber',c:'warn'};
   if(faltaEnt(x))return{t:'Falta entregar',c:'pe'};
-  return x.tipo==='pronta'?{t:'Pago',c:'ok'}:{t:'Concluído',c:'ok'};
+  return{t:'Concluído',c:'ok'};
 }
 
 /* ---- INÍCIO ---- */
@@ -278,15 +278,20 @@ function itemV(x){
 }
 function vVendas(){
   const ms=meses();
-  let l=todas().filter(x=>(!F.mes||x.mes===F.mes)&&(!F.cli||x.cliente===F.cli)&&(F.tipo==='todos'||x.tipo===F.tipo)&&(F.st==='todos'||(F.st==='A entregar'?!!faltaEnt(x):statusV(x).t===F.st)));
+  if(['aberto','A entregar','A receber','Concluído'].indexOf(F.st)<0)F.st='aberto';
+  const conc=F.st==='Concluído',fim=x=>statusV(x).t==='Concluído';
+  const base=todas().filter(x=>(!F.cli||x.cliente===F.cli)&&(F.tipo==='todos'||x.tipo===F.tipo));
+  let l=base.filter(x=>conc?(fim(x)&&(!F.mes||x.mes===F.mes)):F.st==='A entregar'?!!faltaEnt(x):F.st==='A receber'?aReceber(x)>0.01:!fim(x));
+  const nConc=base.filter(fim).length;
   l.sort((a,b)=>(b.data||'')<(a.data||'')?-1:1);
-  let h=`<div class="grid2" style="margin-bottom:8px"><select onchange="F.mes=this.value;render()"><option value="">Todos os meses</option>${ms.map(m=>`<option value="${m}" ${m===F.mes?'selected':''}>${mesNome(m)}</option>`).join('')}</select>
+  let h=`<div class="grid2" style="margin-bottom:8px">${conc?`<select onchange="F.mes=this.value;render()"><option value="">Todos os meses</option>${ms.map(m=>`<option value="${m}" ${m===F.mes?'selected':''}>${mesNome(m)}</option>`).join('')}</select>`:''}
   <select onchange="F.cli=this.value;render()"><option value="">Todos clientes</option>${D.clientes.map(c=>`<option ${c===F.cli?'selected':''}>${esc(c)}</option>`).join('')}</select></div>`;
-  h+=`<div class="chips">${['todos','A entregar','A receber','Concluído','Pago'].map(s=>`<button class="${F.st===s?'on':''}" onclick="F.st='${s}';render()">${s==='todos'?'Todos':s}</button>`).join('')}</div>`;
+  h+=`<div class="chips">${[['aberto','Em aberto'],['A entregar','A entregar'],['A receber','A receber'],['Concluído','Concluídos']].map(s=>`<button class="${F.st===s[0]?'on':''}" onclick="F.st='${s[0]}';render()">${s[1]}</button>`).join('')}</div>`;
   h+=`<div class="chips">${[['todos','Tudo'],['encomenda','Encomendas'],['pronta','Pronta entrega']].map(s=>`<button class="${F.tipo===s[0]?'on':''}" onclick="F.tipo='${s[0]}';render()">${s[1]}</button>`).join('')}</div>`;
   const tkg=l.reduce((s,x)=>s+(x.kgEntregue||0),0),tv=l.reduce((s,x)=>s+(x.tipo==='pronta'?x.valorReal:(x.valorReal||x.estimado)),0);
   h+=`<div class="card row sp"><div><div class="k">${l.length} vendas</div><b>${kg(tkg)}</b></div><div style="text-align:right"><div class="k">Valor</div><b>${brl(tv)}</b></div>${D.user.dono?`<div style="text-align:right"><div class="k">Lucro</div><b style="color:var(--ok)">${brl(l.reduce((s,x)=>s+(x.lucro||0),0))}</b></div>`:''}</div>`;
-  h+=l.map(itemV).join('')||'<p class="mut">Nenhuma venda nesse filtro.</p>';
+  h+=l.map(itemV).join('')||`<p class="mut">${conc?'Nenhuma venda concluída nesse filtro.':'Nada em aberto. Tudo entregue e recebido ✓'}</p>`;
+  if(!conc&&nConc)h+=`<button class="btn sec" style="margin-top:10px" onclick="F.st='Concluído';render()">Ver concluídos (${nConc}) ›</button>`;
   return h+`<button class="fab" onclick="fPedido()">+ Pedido</button>`;
 }
 function tabCores(a,b,la,lb){
