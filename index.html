@@ -433,7 +433,7 @@ function somaRolos(){
 const PIX='\n\n*PIX para pagamento*\nChave: logari.hub@gmail.com\nManuel Alves do Carmo\nBanco BTG';
 function msgCliente(x,o){
   const q=Object.values(o.cores).reduce((a,b)=>a+b,0),v=Math.round(o.kg*o.preco*100)/100,tot=v+(o.frete||0),rec=o.rec||0;
-  let t=`Olá, ${x.cliente}! Segue o fechamento ${x.tipo==='pronta'?'da retirada de '+dbr(o.data):o.resto?'da entrega restante do pedido '+x.protocolo+' (a entrega anterior já está paga)':'do pedido '+x.protocolo}:\n\n`;
+  let t=`Olá, ${x.cliente}! Segue o fechamento ${x.tipo==='pronta'?'da retirada de '+dbr(o.data):o.resto?'da entrega restante do pedido '+x.protocolo:'do pedido '+x.protocolo}:\n\n`;
   t+=Object.entries(o.cores).map(([c,n])=>`• ${c}: ${n} rolo${n>1?'s':''}`).join('\n');
   t+=`\n\nTotal: ${q} rolos · ${kg(o.kg)} (peso líquido)\nPreço: ${brl(o.preco)}/kg\nTecido: ${brl(v)}`;
   if(o.frete)t+=`\nFrete: ${brl(o.frete)}`;
