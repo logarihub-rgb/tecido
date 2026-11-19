@@ -213,7 +213,8 @@ function aplica(a,p){
     Object.assign(x,{cliente:p.cliente,data:p.data,mes:(p.data||'').slice(0,7),entregue:p.cores,qtdEntregue:somaC(p.cores),kgEntregue:p.kg,precoKg:p.precoKg,valorReal:Math.round(p.kg*p.precoKg*100)/100});if(p.frete!=null)x.frete=+p.frete||0}
   else if(a==='salvarExtras'){const x=achaV(p.aba,p.linha);if(x&&p.status!=null)x.statusEnt=p.status}
   else if(a==='salvarNF'){const x=p.tipo==='pronta'?achaR(p.linha):achaV(p.aba,p.linha);if(x)x.nfValor=p.valor}
-  else if(a==='salvarCliente'){const c=(D.cadastro=D.cadastro||[]);const ix=c.findIndex(z=>z.cliente.toLowerCase()===p.cliente.toLowerCase());if(ix>=0)c[ix]=Object.assign({},c[ix],p);else c.push(Object.assign({},p))}
+  else if(a==='salvarCliente'){const c=(D.cadastro=D.cadastro||[]);const ix=p.linha?c.findIndex(z=>z.linha===+p.linha):-1;if(ix>=0)c[ix]=Object.assign({},c[ix],p);else c.push(Object.assign({linha:0},p))}
+  else if(a==='excluirEmpresa'){D.cadastro=(D.cadastro||[]).filter(z=>z.linha!==+p.linha)}
 }
 function ir(t){if(t!==TAB){TAB=t;history.pushState({t},'')}window.scrollTo(0,0);render()}
 function render(){if(!D)return;document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===TAB));const v=$('#view');let h='';try{h=({inicio:vInicio,vendas:vVendas,estoque:vEstoque,credito:vCredito,relat:vRelat,clientes:vClientes,sugestao:vSugestao})[TAB]()}catch(e){h='<p class="mut">Erro: '+esc(e.message)+'</p>'}v.innerHTML=vFila()+h}
@@ -477,11 +478,14 @@ function fPagto(i){
 function kgMedio(x,cor){const r=(x.rolos||[]).filter(z=>z.cor===cor&&+z.kg>0);if(r.length)return r.reduce((s,z)=>s+ +z.kg,0)/r.length;return x.qtdEntregue?x.kgEntregue/x.qtdEntregue:D.padrao.kgRolo}
 const k2=v=>(+v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 let NFX=null;
+let NFEMP=0;
+const empresas=n=>(D.cadastro||[]).filter(c=>c.cliente.toLowerCase()===String(n).toLowerCase());
 function fNF(i){
-  const x=todas()[i];NFX=i;const cad=(D.cadastro||[]).find(c=>c.cliente.toLowerCase()===x.cliente.toLowerCase());
+  const x=todas()[i];NFX=i;NFEMP=0;const emps=empresas(x.cliente),cad=emps[0];
   const cs=Object.keys(x.entregue||{}).filter(c=>x.entregue[c]);
   open_(`<h2>Nota fiscal · ${esc(x.cliente)}</h2>
   ${cad?'':`<div class="card alert"><b>Cliente sem cadastro.</b> <button class="btn sec" style="margin-top:8px" onclick="fCliente('${esc(x.cliente)}')">Cadastrar dados da empresa</button></div>`}
+  ${emps.length>1?`<label>Faturar em qual CNPJ?</label><div class="chips" id="nfemp">${emps.map((e,j)=>`<button class="${j?'':'on'}" onclick="NFEMP=${j};document.querySelectorAll('#nfemp button').forEach((b,k)=>b.classList.toggle('on',k===${j}));textoNF()">${esc((e.fantasia||e.razao||e.cnpj).split(' ').slice(0,3).join(' '))}<br><small>${esc(e.cnpj)}</small></button>`).join('')}</div>`:''}
   <p class="mut" style="margin:0">Quantos rolos de cada cor vão na nota (o cliente decide):</p>
   <div class="cores" id="fnf">${cs.map(k=>`<div class="cor"><span><i class="dot" style="background:${COR_HEX[k]}"></i>${k} <small class="mut">de ${x.entregue[k]}</small></span><span class="step"><button type="button" onclick="stp(this,-1)">−</button><input inputmode="numeric" data-c="${k}" value="${x.entregue[k]}"><button type="button" onclick="stp(this,1)">+</button></span></div>`).join('')}</div>
   <div class="nfl" id="nftxt"></div>
@@ -490,7 +494,7 @@ function fNF(i){
   $('#fnf').addEventListener('input',textoNF);textoNF();
 }
 function textoNF(){
-  const x=todas()[NFX],cad=(D.cadastro||[]).find(c=>c.cliente.toLowerCase()===x.cliente.toLowerCase())||{},q=lerCores('fnf');
+  const x=todas()[NFX],cad=empresas(x.cliente)[NFEMP]||{},q=lerCores('fnf');
   const E=Object.entries(q),kks=E.map(([c,n])=>Math.round(kgMedio(x,c)*n*100)/100);
   const tudo=E.length&&E.every(([c,n])=>n===(x.entregue||{})[c])&&Object.keys(x.entregue||{}).filter(c=>x.entregue[c]).length===E.length;
   if(tudo&&x.kgEntregue){const d=Math.round((x.kgEntregue-kks.reduce((a,b)=>a+b,0))*100)/100;if(Math.abs(d)<1)kks[kks.length-1]=Math.round((kks[kks.length-1]+d)*100)/100}
@@ -509,18 +513,35 @@ function enviaNF(){const x=todas()[NFX];if(!NFX_T)return;
 function vClientes(){
   const cad=D.cadastro||[],tem=n=>cad.some(c=>c.cliente.toLowerCase()===n.toLowerCase());
   let h=`<button class="btn" style="margin:0 0 12px" onclick="fCliente('')">+ Cadastrar cliente</button>`;
-  h+=D.clientes.filter(c=>!/^(LOGARI|INVENT[AÁ]RIO)$/i.test(c)).map(c=>{const x=cad.find(z=>z.cliente.toLowerCase()===c.toLowerCase());return `<button class="item" onclick="fCliente('${esc(c)}')"><div class="row sp"><b>${esc(c)}</b><span class="pill ${x?'ok':'pe'}">${x?'Cadastro OK':'Sem dados'}</span></div>${x?`<div class="mut" style="font-size:13px">${esc(x.razao)} · ${esc(x.cnpj)}</div>`:''}</button>`}).join('');
+  h+=D.clientes.filter(c=>!/^(LOGARI|INVENT[AÁ]RIO)$/i.test(c)).map(c=>{const es=empresas(c),x=es[0];return `<button class="item" onclick="fCliente('${esc(c)}')"><div class="row sp"><b>${esc(c)}</b><span class="pill ${x?'ok':'pe'}">${es.length>1?es.length+' CNPJs':x?'Cadastro OK':'Sem dados'}</span></div>${es.map(e=>`<div class="mut" style="font-size:13px">${esc(e.razao)} · ${esc(e.cnpj)}</div>`).join('')}</button>`}).join('');
   return h;
 }
-function fCliente(nome){
-  const x=(D.cadastro||[]).find(c=>c.cliente.toLowerCase()===String(nome).toLowerCase())||{cliente:nome};
-  const f=(id,lab,ph,im)=>`<label>${lab}</label><input id="cl_${id}" value="${esc(x[id]||'')}" placeholder="${ph||''}" ${im?'inputmode="numeric"':''}>`;
-  open_(`<h2>${nome?esc(nome):'Novo cliente'}</h2>${nome?'':f('cliente','Nome no app','ex: João')}${f('razao','Razão social','DIPRA INDUSTRIA E COMERCIO LTDA')}
-  <div class="grid2"><div>${f('cnpj','CNPJ','00.000.000/0001-00')}</div><div>${f('ie','Inscrição estadual','',1)}</div></div>
-  ${f('rua','Rua e número','RUA MARTINHO DO AMARAL, 45')}<div class="grid2"><div>${f('bairro','Bairro','')}</div><div>${f('cep','CEP','05.134-380')}</div></div>
-  <div class="grid2"><div>${f('cidade','Cidade','SÃO PAULO')}</div><div>${f('uf','UF','SP')}</div></div>${f('tel','Telefone','')}${f('obs','Observação','')}
-  <button class="btn" onclick="sCliente('${esc(nome)}')">Salvar cadastro</button>`)}
-function sCliente(nome){const p={};['cliente','razao','cnpj','ie','rua','bairro','cep','cidade','uf','tel','obs'].forEach(k=>{const e=$('#cl_'+k);if(e)p[k]=e.value.trim()});if(nome)p.cliente=nome;if(!p.cliente)return toast('Informe o nome');
+let CLE=null;
+function fCliente(nome,j){
+  const es=nome?empresas(nome):[],nova=j==='nova',x=nova?{cliente:nome}:(es[j||0]||{cliente:nome});CLE={nome,linha:nova?0:(x.linha||0),nova:nova||!es.length,arquivo:x.arquivo||''};
+  const f=(id,lab,im)=>`<label>${lab}</label><input id="cl_${id}" value="${esc(x[id]||'')}" ${im?'inputmode="numeric"':''}>`;
+  open_(`<h2>${nome?esc(nome):'Novo cliente'}</h2>
+  ${es.length>1||(es.length&&nova)?`<div class="chips">${es.map((e,k)=>`<button class="${!nova&&k===(j||0)?'on':''}" onclick="fCliente('${esc(nome)}',${k})">${esc(e.cnpj||e.razao||'CNPJ '+(k+1))}</button>`).join('')}${nova?'<button class="on">Novo CNPJ</button>':''}</div>`:''}
+  ${nome?'':f('cliente','Nome no app')}
+  <div class="card" style="margin-top:10px"><div class="row sp"><div><div class="k">Cartão CNPJ</div><div class="mut" style="font-size:12px" id="clres">Foto ou PDF: preenche tudo sozinho${x.arquivo?' · arquivo salvo ✓':''}</div></div><label class="btn" style="width:auto;margin:0;padding:10px 12px;cursor:pointer">📄 Ler<input type="file" accept="image/*,application/pdf" style="display:none" onchange="lerCartao(this.files[0]);this.value=''"></label></div></div>
+  <label>CNPJ</label><div class="row" style="gap:8px"><input id="cl_cnpj" value="${esc(x.cnpj||'')}" inputmode="numeric" style="flex:1"><button class="btn sec" style="width:auto;margin:0;padding:10px 12px" onclick="lerCartao(null)">Buscar</button></div>
+  ${f('razao','Razão social')}${f('ie','Inscrição estadual',1)}
+  ${f('rua','Rua e número')}<div class="grid2"><div>${f('bairro','Bairro')}</div><div>${f('cep','CEP')}</div></div>
+  <div class="grid2"><div>${f('cidade','Cidade')}</div><div>${f('uf','UF')}</div></div>${f('tel','Telefone')}${f('obs','Observação')}
+  <button class="btn" onclick="sCliente()">Salvar cadastro</button>
+  ${nome&&es.length&&!nova?`<button class="btn sec" onclick="fCliente('${esc(nome)}','nova')">+ Adicionar outro CNPJ</button>`:''}
+  ${nome&&es.length>1&&!nova?`<button class="btn sec" style="color:var(--bad);border-color:#6a2f20" onclick="if(confirm('Remover o CNPJ ${esc(x.cnpj)} de ${esc(nome)}?'))acao('excluirEmpresa',{cliente:'${esc(nome)}',linha:${x.linha}})">Remover este CNPJ</button>`:''}`)}
+async function lerCartao(file){
+  const cnpj=val('cl_cnpj').replace(/\D/g,'');if(!file&&cnpj.length!==14)return toast('Digite o CNPJ completo ou leia o cartão');
+  $('#clres').textContent=file?'Lendo o cartão…':'Buscando na Receita…';
+  try{const p={cnpj};if(file){const pdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name);if(pdf&&file.size>8e6)return toast('PDF muito grande');p.b64=pdf?await arquivoB64(file):await fotoB64(file);p.mime=pdf?'application/pdf':'image/jpeg'}
+    const r=(await call('lerCNPJ',p)).r;if(r.arquivo)CLE.arquivo=r.arquivo;
+    if(r.erro){$('#clres').innerHTML='<span style="color:var(--bad)">'+esc(r.erro)+'. Digite o CNPJ e toque em Buscar.</span>';return}
+    ['cnpj','razao','rua','bairro','cep','cidade','uf','tel'].forEach(k=>{const e=$('#cl_'+k);if(e&&r[k])e.value=r[k]});
+    $('#clres').innerHTML=`<b style="color:var(--ok)">Dados preenchidos</b>${r.situacao&&r.situacao!=='ATIVA'?' · <span style="color:var(--bad)">situação '+esc(r.situacao)+'</span>':''}${r.aviso?' · '+esc(r.aviso):''}<br>Falta só a inscrição estadual (não vem no cartão). Confira e salve.`}
+  catch(e){$('#clres').innerHTML='<span style="color:var(--bad)">'+esc(e.message)+'</span>'}}
+function sCliente(){const p={};['cliente','razao','cnpj','ie','rua','bairro','cep','cidade','uf','tel','obs'].forEach(k=>{const e=$('#cl_'+k);if(e)p[k]=e.value.trim()});if(CLE.nome)p.cliente=CLE.nome;if(!p.cliente)return toast('Informe o nome');
+  p.arquivo=CLE.arquivo;if(CLE.linha)p.linha=CLE.linha;if(CLE.nova)p.nova=true;
   acao('salvarCliente',p);if(NFX!=null&&$('#nftxt'))textoNF()}
 function fRetirada(i){
   const x=i!=null?todas()[i]:null;ROLOS=[];RESTO=false;
