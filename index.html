@@ -207,7 +207,7 @@ function aplica(a,p){
     Object.assign(x,{data:p.data,cliente:p.cliente,precoKg:pk,pedido:p.cores,qtdPedido:q,kgPedido:kp,estimado:kp*pk,mes:(p.data||'').slice(0,7)});if(p.recebido!==''&&p.recebido!=null)x.recebido=+p.recebido;
     if(!D.clientes.includes(p.cliente))D.clientes.push(p.cliente)}
   else if(a==='registrarEntrega'){const x=achaV(p.aba,p.linha);if(!x)return;x.dataEntrega=p.data;x.entregue=p.cores;x.qtdEntregue=somaC(p.cores);x.kgEntregue=p.kg;x.valorReal=Math.round(p.kg*x.precoKg*100)/100;if(p.frete!=null)x.frete=+p.frete||0;
-    x.statusEnt=Object.keys(x.pedido||{}).some(k=>(x.pedido[k]||0)>(p.cores[k]||0))?'parcial':'';if(p.doEstoque){x.doEstoque=true;baixaEst(p.cores,p.kg)}}
+    x.statusEnt=Object.keys(x.pedido||{}).some(k=>(x.pedido[k]||0)>(p.cores[k]||0))?'parcial':'';if(p.doEstoque){x.doEstoque=true;baixaEst(p.append?p.coresParte:p.cores,p.append?p.kgParte:p.kg)}}
   else if(a==='pagamentoVenda'){const x=p.tipo==='pronta'?achaR(p.linha):achaV(p.aba,p.linha);if(!x)return;const novo=p.total!=null&&p.total!==''?+p.total:(x.recebido||0)+(+p.add||0);x.recebido=Math.round(novo*100)/100;if(x.tipo==='pronta'||x.valorReal)x.pago=novo>=totalV(x)-0.01;if(p.pagoFornecedor!=null)x.pagoFornecedor=!!p.pagoFornecedor}
   else if(a==='novaRetirada'){let x=p.linha?achaR(p.linha):null;if(!x){x={tipo:'pronta',aba:D.inv.aba,linha:0,pago:false,recebido:0,fotos:[],rolos:[],pend:true};D.inv.retiradas.push(x);baixaEst(p.cores,p.kg)}
     Object.assign(x,{cliente:p.cliente,data:p.data,mes:(p.data||'').slice(0,7),entregue:p.cores,qtdEntregue:somaC(p.cores),kgEntregue:p.kg,precoKg:p.precoKg,valorReal:Math.round(p.kg*p.precoKg*100)/100});if(p.frete!=null)x.frete=+p.frete||0}
@@ -363,14 +363,13 @@ function fEntrega(i,resto){
   <label>Data da entrega</label><input id="fdt" type="date" value="${resto?hoje():(x.dataEntrega||hoje())}">
   <label>${resto?'Rolos desta entrega':'Rolos entregues por cor'}</label>${coresInput('fc',resto?fe.cores:(x.qtdEntregue?x.entregue:x.pedido))}
   <div class="grid2"><div><label>${resto?'Quilos desta entrega':'Quilos (peso líquido)'}</label><input id="fkg" inputmode="decimal" value="${!resto&&x.kgEntregue?String(x.kgEntregue).replace('.',','):''}" placeholder="ex: 191,41"></div><div><label>Frete ${resto?'desta entrega':'do cliente'} (R$)</label><input id="ffr" inputmode="decimal" value="${!resto&&x.frete?String(x.frete).replace('.',','):''}" placeholder="0,00"></div></div>
-  <div class="check"><input type="checkbox" id="fde" ${x.doEstoque?'checked disabled':''}> Saiu do meu estoque (dar baixa na pronta entrega)</div>
   <button class="btn" onclick="sEntrega(${i})">Salvar entrega</button>
   <button class="btn wa" onclick="whatsForm(${i},this)">WhatsApp + fotos</button>`);
 }
 function rolosOk(){return ROLOS.filter(r=>+r.kg>0).map(r=>({cor:r.cor||'',kg:+r.kg}))}
 function fotosOk(){return ROLOS.map(r=>r.foto).filter(Boolean)}
-function sEntrega(i){const x=todas()[i],p={aba:x.aba,linha:x.linha,data:val('fdt'),cores:lerCores('fc'),kg:num(val('fkg')),frete:num(val('ffr')),doEstoque:$('#fde').checked&&!x.doEstoque};
-  if(RESTO){const c=Object.assign({},x.entregue);for(const k in p.cores)c[k]=(c[k]||0)+p.cores[k];p.cores=c;p.kg=Math.round(((x.kgEntregue||0)+p.kg)*100)/100;p.frete=Math.round(((x.frete||0)+p.frete)*100)/100;p.append=true;p.doEstoque=false}
+function sEntrega(i){const x=todas()[i],p={aba:x.aba,linha:x.linha,data:val('fdt'),cores:lerCores('fc'),kg:num(val('fkg')),frete:num(val('ffr')),doEstoque:!x.doEstoque};
+  if(RESTO){const c=Object.assign({},x.entregue);for(const k in p.cores)c[k]=(c[k]||0)+p.cores[k];p.cores=c;p.kg=Math.round(((x.kgEntregue||0)+p.kg)*100)/100;p.frete=Math.round(((x.frete||0)+p.frete)*100)/100;p.coresParte=lerCores('fc');p.kgParte=num(val('fkg'));p.append=true;p.doEstoque=true}
   if(ROLOS.some(r=>r.st==='lendo'||r.st==='fila'))return toast('Espere terminar a leitura das fotos');
   if(ROLOS.length){p.rolos=rolosOk();p.fotos=fotosOk()}acao('registrarEntrega',p)}
 function reduzir(file){return new Promise((res,rej)=>{const img=new Image();img.onload=()=>{const M=1600,sc=Math.min(1,M/Math.max(img.width,img.height));const c=document.createElement('canvas');c.width=Math.round(img.width*sc);c.height=Math.round(img.height*sc);c.getContext('2d').drawImage(img,0,0,c.width,c.height);const thumb=(()=>{const t=document.createElement('canvas');const s2=96/Math.max(c.width,c.height);t.width=c.width*s2;t.height=c.height*s2;t.getContext('2d').drawImage(c,0,0,t.width,t.height);return t.toDataURL('image/jpeg',.7)})();res({b64:c.toDataURL('image/jpeg',.82).split(',')[1],thumb});URL.revokeObjectURL(img.src)};img.onerror=rej;img.src=URL.createObjectURL(file)})}
