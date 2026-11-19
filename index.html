@@ -405,7 +405,6 @@ function fPagto(i){
   <div class="card"><table><tr><td>Total ${x.frete?'(com frete)':''}</td><td><b>${brl(tot)}</b></td></tr><tr><td>Já recebido</td><td>${brl(rec)}</td></tr><tr><td><b>Falta</b></td><td><b style="color:${fal>0.01?'var(--warn)':'var(--ok)'}">${brl(fal)}</b></td></tr></table></div>
   <label>Recebi agora (R$)</label><input id="frec" inputmode="decimal" value="${fal>0.01?String(fal.toFixed(2)).replace('.',','):''}">
   <button class="btn" onclick="const v=num(val('frec'));if(!v)return toast('Informe o valor');acao('pagamentoVenda',{tipo:'${x.tipo}',aba:'${esc(x.aba)}',linha:${x.linha},add:v})">Registrar recebimento</button>
-  ${D.user.dono&&x.tipo!=='pronta'?`<div class="check"><input type="checkbox" id="fpf" ${x.pagoFornecedor?'checked':''} onchange="acao('pagamentoVenda',{tipo:'encomenda',aba:'${esc(x.aba)}',linha:${x.linha},add:0,pagoFornecedor:this.checked},false)"> Fornecedor pago</div>`:''}
   <button class="btn sec" onclick="const v=prompt('Total já recebido (R$):','${String(rec).replace('.',',')}');if(v!==null)acao('pagamentoVenda',{tipo:'${x.tipo}',aba:'${esc(x.aba)}',linha:${x.linha},total:num(v)})">Corrigir total recebido</button>`);
 }
 // ---- NOTA FISCAL (documento para o contador) ----
