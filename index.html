@@ -565,8 +565,8 @@ function vEstoque(){
 function projetar(){const S=sugestao(),tot=S.linhas.reduce((a,l)=>a+l.q,0);
   document.querySelectorAll('#fc input').forEach(i=>{const l=S.linhas.find(z=>z.k===i.dataset.c);i.value=l&&l.q?l.q:''});$('#fc').dispatchEvent(new Event('input'));
   $('#fproj').innerHTML=`<div class="mut" style="font-size:12.5px;margin:8px 0 6px">Fornecedor leva em média ${n0(S.ltMed)} dia(s), até ${n0(S.ltMax)} · o pedido cobre ${S.cobrir} dias · últimas ${SG.sem} semanas de entregas</div>
-  <table><tr><th style="text-align:left">Cor</th><th>Sai/sem</th><th>Livre</th><th>A caminho</th><th>Pedir</th></tr>${S.linhas.map(l=>`<tr><td><span class="dot" style="background:${COR_HEX[l.k]}"></span> ${l.k}${l.conf<0.95?` <span style="color:var(--warn);font-size:11px">⚠ veio ${Math.round(l.conf*100)}%</span>`:''}</td><td>${l.mu.toFixed(1).replace('.',',')}</td><td style="color:${l.disp<0?'var(--bad)':'inherit'}">${n0(l.disp-l.cam*Math.min(1,l.conf))}</td><td>${l.cam||'—'}</td><td><b>${l.q||'—'}</b></td></tr>`).join('')}</table>
-  ${S.linhas.filter(l=>l.falhas>=2).map(l=>`<div style="font-size:12.5px;color:var(--warn);margin-top:6px">⚠ ${l.k}: faltou nos últimos ${l.falhas} pedidos, já aumentei.</div>`).join('')}
+  <table><tr><th style="text-align:left">Cor</th><th>Sai/sem</th><th>Livre</th><th>A caminho</th><th>Pedir</th></tr>${S.linhas.map(l=>`<tr><td><span class="dot" style="background:${COR_HEX[l.k]}"></span> ${l.k}${l.conf<0.95?` <span style="color:var(--warn);font-size:11px">⚠ veio ${Math.round(l.conf*100)}%</span>`:''}</td><td>${l.mu.toFixed(1).replace('.',',')}</td><td style="color:${l.disp<0?'var(--bad)':'inherit'}">${n0(l.disp-l.cam)}</td><td>${l.cam||'—'}</td><td><b>${l.q||'—'}</b></td></tr>`).join('')}</table>
+  ${S.linhas.filter(l=>l.falhas>=2).map(l=>`<div style="font-size:12.5px;color:var(--warn);margin-top:6px">⚠ ${l.k}: em falta no fornecedor nos últimos ${l.falhas} pedidos. O que está a caminho já conta, não pedi a mais.</div>`).join('')}
   ${(D.fora||[]).length?`<div class="mut" style="font-size:12.5px;margin-top:6px">Fora da projeção: ${(D.fora||[]).map(esc).join(', ')}</div>`:''}
   <div style="font-size:13px;margin-top:8px"><b>${n0(tot)} rolos</b> preenchidos abaixo · ajuste o que quiser antes de salvar.</div>`}
 function fFornecedor(cores){
@@ -630,7 +630,7 @@ const META_PAG=10;
 const addD=(d,n)=>{const x=new Date(d+'T12:00');x.setDate(x.getDate()+n);return x.toISOString().slice(0,10)};
 const metaD=x=>addD(x.data,META_PAG),metaN=x=>difD(metaD(x),hoje());
 // ---- SUGESTÃO DE PEDIDO: consumo de cada cliente + estoque + atraso e falhas do fornecedor ----
-let SG={sem:6,ciclo:7,margem:15};
+let SG={sem:6,ciclo:7,margem:10};
 function entregasJanela(dias){const ini=addD(hoje(),-dias),L=[];
   D.vendas.forEach(x=>{if(x.dataEntrega&&x.dataEntrega>=ini&&!INTERNO.test(x.cliente))L.push({cli:x.cliente,data:x.dataEntrega,cores:x.entregue||{}})});
   (D.inv.retiradas||[]).forEach(x=>{if(!x.baixa&&x.data>=ini&&!INTERNO.test(x.cliente))L.push({cli:x.cliente,data:x.data,cores:x.entregue||{}})});
@@ -645,12 +645,12 @@ function sugestao(){
   // consumo semanal por cor (média e variação)
   const sem={};cores.forEach(k=>sem[k]=Array(W).fill(0));
   L.forEach(e=>{const w=Math.min(W-1,Math.floor(difD(hoje(),e.data)/7));for(const k in e.cores)if(sem[k])sem[k][w]+=e.cores[k]});
-  const cobrir=SG.ciclo+ltMax,z=1.3,cp=comprometido(),est=D.inv.estoque.cores,cam={};
+  const cobrir=SG.ciclo+ltMax,z=1,cp=comprometido(),est=D.inv.estoque.cores,cam={};
   D.inv.pedidos.forEach(p=>{const f=faltaF(p);if(f)for(const k in f.cores)cam[k]=(cam[k]||0)+f.cores[k]});
   const linhas=cores.map(k=>{const v=sem[k],mu=v.reduce((a,b)=>a+b,0)/W,sd=Math.sqrt(v.reduce((a,b)=>a+(b-mu)*(b-mu),0)/W);
     const prev=mu/7*cobrir,seg=z*sd*Math.sqrt(cobrir/7),r=Math.max(conf[k],0);
-    const disp=(est[k]||0)-(cp.cores[k]||0)+(cam[k]||0)*Math.min(1,r);
-    let q=(prev+seg)*(1+SG.margem/100)-disp;if(r<0.95&&q>0)q=q/Math.max(r,0.5);q=Math.max(0,Math.ceil(q));
+    const disp=(est[k]||0)-(cp.cores[k]||0)+(cam[k]||0);
+    let q=prev*(1+SG.margem/100)+seg-disp;q=Math.max(0,Math.round(q));
     return{k,mu,sd,prev,seg,disp,conf:conf[k],falhas:falhas[k],cam:cam[k]||0,q}}).filter(l=>l.mu>0||l.q>0||l.cam>0);
   // clientes
   const by={};L.forEach(e=>{const b=by[e.cli]=by[e.cli]||{datas:new Set(),cores:{}};b.datas.add(e.data);for(const k in e.cores)b.cores[k]=(b.cores[k]||0)+e.cores[k]});
@@ -665,7 +665,7 @@ function vSugestao(){
   <div class="grid2" style="grid-template-columns:repeat(3,1fr);margin-top:10px"><div><label>Histórico</label>${sel('sem',[[4,'4 semanas'],[6,'6 semanas'],[8,'8 semanas'],[12,'12 semanas']],SG.sem)}</div><div><label>Próximo pedido em</label>${sel('ciclo',[[3,'3 dias'],[5,'5 dias'],[7,'7 dias'],[10,'10 dias'],[14,'14 dias']],SG.ciclo)}</div><div><label>Margem extra</label>${sel('margem',[[0,'0%'],[10,'10%'],[15,'15%'],[25,'25%'],[40,'40%']],SG.margem)}</div></div></div>`;
   h+=`<div class="card"><div class="row sp"><div><div class="k">Pedir agora</div><div class="big">${n0(tot)} rolos</div><div class="mut" style="font-size:13px">≈ ${kg(kgT)} · cobre ${S.cobrir} dias</div></div><div style="text-align:right"><div class="k">Crédito disponível</div><div class="mid" style="color:${kgT>cred?'var(--bad)':'var(--ok)'}">${kg(cred)}</div>${kgT>cred?'<div style="color:var(--bad);font-size:12px">passa do crédito</div>':''}</div></div>
   <table style="margin-top:10px"><tr><th style="text-align:left">Cor</th><th>Sai/sem</th><th>Livre</th><th>Pedir</th></tr>${S.linhas.map(l=>`<tr><td><span class="dot" style="background:${COR_HEX[l.k]}"></span> ${l.k}${l.conf<0.95?` <span style="color:var(--warn);font-size:11px">⚠ veio ${Math.round(l.conf*100)}%</span>`:''}</td><td>${l.mu.toFixed(1).replace('.',',')}</td><td style="color:${l.disp<0?'var(--bad)':'inherit'}">${n0(l.disp)}</td><td><b style="font-size:16px">${l.q||'—'}</b></td></tr>`).join('')}</table>
-  ${S.linhas.filter(l=>l.falhas>=2).map(l=>`<div class="mut" style="font-size:12.5px;color:var(--warn);margin-top:8px">⚠ ${l.k}: o fornecedor não mandou nos últimos ${l.falhas} pedidos. Já aumentei a quantidade. Vale pedir com antecedência ou cobrar o fornecedor.</div>`).join('')}
+  ${S.linhas.filter(l=>l.falhas>=2).map(l=>`<div class="mut" style="font-size:12.5px;color:var(--warn);margin-top:8px">⚠ ${l.k}: o fornecedor não mandou nos últimos ${l.falhas} pedidos. O que está a caminho já conta na conta, então não pedi a mais. Vale cobrar o prazo dele.</div>`).join('')}
   <button class="btn" style="margin-top:12px" onclick="fFornecedor(${esc(JSON.stringify(Object.fromEntries(S.linhas.filter(l=>l.q).map(l=>[l.k,l.q]))))})">Fazer pedido com essa sugestão</button>
   <p class="mut" style="font-size:12px;margin:8px 0 0">"Livre" = estoque − pedidos de clientes ainda não entregues + o que está a caminho. Você pode ajustar as quantidades antes de salvar.</p></div>`;
   h+=`<div class="k" style="margin:14px 4px 6px">O que cada cliente costuma pegar (últimas ${SG.sem} semanas)</div>`;
