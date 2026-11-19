@@ -194,6 +194,7 @@ function excluir(i){const x=todas()[i],q=x.tipo==='pronta'?x.qtdEntregue:x.qtdPe
   if(!confirm(`Excluir ${x.tipo==='pronta'?'a retirada':'o pedido'} de ${x.cliente} de ${dbr(x.data)} (${n0(q)} rolos)? Isso não tem volta.`))return;
   if(x.tipo==='pronta')acao('excluirRetirada',{linha:x.linha,cliente:x.cliente,data:x.data});else acao('excluirPedido',{aba:x.aba,linha:x.linha,cliente:x.cliente,data:x.data})}
 function aplica(a,p){
+  if(a==='foraProjecao'){D.fora=(D.fora||[]).filter(c=>c!==p.cliente);if(p.fora)D.fora.push(p.cliente);return}
   if(a==='receberFornecedor'){const x=D.inv.pedidos.find(r=>r.linha===+p.linha);if(!x)return;const e=D.inv.estoque;for(const k of D.cores){const d=(p.cores[k]||0)-((x.entregue||{})[k]||0);if(d){e.cores[k]=(e.cores[k]||0)+d;e.qtde+=d}}e.kg+=(+p.kg||0)-(x.kgEntregue||0);
     x.dataEntrega=p.data;x.entregue=p.cores;x.qtdEntregue=somaC(p.cores);x.kgEntregue=p.kg;x.statusEnt=Object.keys(x.pedido||{}).some(k=>(x.pedido[k]||0)>(p.cores[k]||0))?'parcial':'';return}
   if(a==='encerrarFornecedor'){const x=D.inv.pedidos.find(r=>r.linha===+p.linha);if(x)x.statusEnt='encerrado';return}
@@ -566,6 +567,7 @@ function projetar(){const S=sugestao(),tot=S.linhas.reduce((a,l)=>a+l.q,0);
   $('#fproj').innerHTML=`<div class="mut" style="font-size:12.5px;margin:8px 0 6px">Fornecedor leva em média ${n0(S.ltMed)} dia(s), até ${n0(S.ltMax)} · o pedido cobre ${S.cobrir} dias · últimas ${SG.sem} semanas de entregas</div>
   <table><tr><th style="text-align:left">Cor</th><th>Sai/sem</th><th>Livre</th><th>A caminho</th><th>Pedir</th></tr>${S.linhas.map(l=>`<tr><td><span class="dot" style="background:${COR_HEX[l.k]}"></span> ${l.k}${l.conf<0.95?` <span style="color:var(--warn);font-size:11px">⚠ veio ${Math.round(l.conf*100)}%</span>`:''}</td><td>${l.mu.toFixed(1).replace('.',',')}</td><td style="color:${l.disp<0?'var(--bad)':'inherit'}">${n0(l.disp-l.cam*Math.min(1,l.conf))}</td><td>${l.cam||'—'}</td><td><b>${l.q||'—'}</b></td></tr>`).join('')}</table>
   ${S.linhas.filter(l=>l.falhas>=2).map(l=>`<div style="font-size:12.5px;color:var(--warn);margin-top:6px">⚠ ${l.k}: faltou nos últimos ${l.falhas} pedidos, já aumentei.</div>`).join('')}
+  ${(D.fora||[]).length?`<div class="mut" style="font-size:12.5px;margin-top:6px">Fora da projeção: ${(D.fora||[]).map(esc).join(', ')}</div>`:''}
   <div style="font-size:13px;margin-top:8px"><b>${n0(tot)} rolos</b> preenchidos abaixo · ajuste o que quiser antes de salvar.</div>`}
 function fFornecedor(cores){
   open_(`<h2>Pedido ao fornecedor</h2><p class="mut">Lança no bloco Pedido Solicitado do ${esc(D.inv.aba)}</p>
@@ -632,7 +634,8 @@ let SG={sem:6,ciclo:7,margem:15};
 function entregasJanela(dias){const ini=addD(hoje(),-dias),L=[];
   D.vendas.forEach(x=>{if(x.dataEntrega&&x.dataEntrega>=ini&&!INTERNO.test(x.cliente))L.push({cli:x.cliente,data:x.dataEntrega,cores:x.entregue||{}})});
   (D.inv.retiradas||[]).forEach(x=>{if(!x.baixa&&x.data>=ini&&!INTERNO.test(x.cliente))L.push({cli:x.cliente,data:x.data,cores:x.entregue||{}})});
-  return L}
+  const fo=D.fora||[];return L.filter(e=>fo.indexOf(e.cli)<0)}
+function foraProj(c,f){if(f&&!confirm('Tirar '+c+' da projeção? As compras dele deixam de contar até você voltar com ele.'))return;acao('foraProjecao',{cliente:c,fora:!!f},false)}
 function sugestao(){
   const W=SG.sem,dias=W*7,L=entregasJanela(dias),cores=D.cores;
   // prazo do fornecedor (pedido → chegada) e confiabilidade por cor nos últimos pedidos
@@ -668,7 +671,8 @@ function vSugestao(){
   h+=`<div class="k" style="margin:14px 4px 6px">O que cada cliente costuma pegar (últimas ${SG.sem} semanas)</div>`;
   h+=S.clis.map(c=>{const atras=c.prox<hoje();return `<div class="card"><div class="row sp"><b style="font:800 17px var(--serif)">${esc(c.c)}</b><span class="pill ${atras?'warn':'pe'}">${c.freq>=0.9?'~'+n0(c.freq)+'x por semana':'a cada ~'+n0(c.int)+' dias'}</span></div>
     <div class="mut" style="font-size:13px;margin-top:4px">Por vez: ${Object.entries(c.porVez).filter(([k,n])=>n).map(([k,n])=>n+' '+k).join(' · ')||'—'}</div>
-    <div style="font-size:13px;margin-top:4px">Última: ${dbr(c.ult)} · próxima provável: <b style="color:${atras?'var(--warn)':'inherit'}">${dbr(c.prox)}${atras?' (já passou)':''}</b></div></div>`}).join('')||'<p class="mut">Sem entregas no período.</p>';
+    <div style="font-size:13px;margin-top:4px">Última: ${dbr(c.ult)} · próxima provável: <b style="color:${atras?'var(--warn)':'inherit'}">${dbr(c.prox)}${atras?' (já passou)':''}</b></div><button class="btn sec" style="margin:8px 0 0;padding:8px;font-size:13px" onclick="foraProj('${esc(c.c).replace(/'/g,"\\'")}',true)">Parou de comprar · tirar da projeção</button></div>`}).join('')||'<p class="mut">Sem entregas no período.</p>';
+  const fo=D.fora||[];if(fo.length)h+=`<div class="k" style="margin:14px 4px 6px">Fora da projeção</div>`+fo.map(c=>`<div class="card row sp"><b>${esc(c)}</b><button class="btn sec" style="width:auto;margin:0;padding:8px 12px" onclick="foraProj('${esc(c).replace(/'/g,"\\'")}',false)">Voltar</button></div>`).join('');
   return h}
 
 /* ---- CRÉDITO ---- */
