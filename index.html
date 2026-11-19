@@ -149,27 +149,73 @@ async function post(action,p){const r=await fetch(API,{method:'POST',body:JSON.s
 async function call(action,p,quiet){if(!quiet)loading(true);try{return await post(action,p)}catch(e){if(/Failed to fetch|NetworkError|Load failed|JSON/.test(e.message))throw new Error('Sem conexão. Tente de novo.');throw e}finally{if(!quiet)loading(false)}}
 function sync(on){const e=$('#sync');if(e)e.className='sync'+(on?' on':'')}
 const CK=()=>'tec_d_'+PIN;
-async function entrar(){PIN=$('#pin').value.trim();if(!PIN)return;const cache=getStore(CK());
+async function entrar(){PIN=$('#pin').value.trim();if(!PIN)return;await filaInicia();const cache=getStore(CK());
   if(cache){try{store('tec_pin',PIN);abrir();setD(JSON.parse(cache),true);carregar();return}catch(e){}}
   try{await call('login');store('tec_pin',PIN);abrir();carregar()}catch(e){$('#lerr').textContent=e.message;if(/PIN/.test(e.message))store('tec_pin')}}
 function abrir(){$('#login').style.display='none';$('#app').style.display='block';history.replaceState({t:TAB},'')}
-let CARR=false;
+let CARR=false,RAW=null,EXT=null,FILA=[],PEDE_EXT=false;
+const EK=()=>'tec_ext_'+PIN;
+function extLocal(){if(EXT)return EXT;try{EXT=JSON.parse(getStore(EK())||'null')}catch(e){EXT=null}return EXT}
 async function carregar(force){if(CARR)return;CARR=true;sync(true);if(!D)loading(true);
-  try{const r=await call('dados',{force:!!force},true);setD(r.data);if(force)toast('Atualizado')}
-  catch(e){if(/PIN/.test(e.message)){store('tec_pin');store(CK());location.reload();return}toast(D?'Sem conexão — mostrando dados salvos':e.message)}
-  finally{CARR=false;sync(false);loading(false);processaFila()}}
-function setD(d,doCache){D=d;if(!doCache)store(CK(),JSON.stringify(d));$('#sub').textContent=d.user.nome+' · '+String(d.atualizado).slice(-5);if(!F.mes){F.mes=d.vendas.length?ultimoMes():'';R.mes=F.mes}render()}
-function fila(){try{return JSON.parse(getStore('tec_fila')||'[]')}catch(e){return[]}}
-function setFila(f){store('tec_fila',f.length?JSON.stringify(f):undefined)}
+  try{const ex=extLocal();const r=await call('dados',{force:!!force,ev:ex?ex.versao:''},true);setD(r.data);if(force)toast('Atualizado')}
+  catch(e){if(/PIN/.test(e.message)){store('tec_pin');store(CK());store(EK());location.reload();return}if(!D)toast(e.message);else if(force)toast('Sem sinal — usando os dados do celular')}
+  finally{CARR=false;sync(FILA.length>0);loading(false);if(FILA.length)processaFila()}}
+// dados = o que veio do servidor (RAW) + extrato dos meses fechados + lançamentos ainda não enviados
+function monta(){const ex=extLocal();D=JSON.parse(JSON.stringify(RAW));D.vendas=D.vendas.concat(ex?JSON.parse(JSON.stringify(ex.vendas)):[]);FILA.forEach(it=>{try{aplica(it.a,it.p)}catch(e){}})}
+function setD(d,doCache){
+  if(d.extrato){EXT=d.extrato;store(EK(),JSON.stringify(EXT))}delete d.extrato;
+  RAW=d;if(!doCache)store(CK(),JSON.stringify(RAW));monta();
+  $('#sub').textContent=d.user.nome+' · '+String(d.atualizado).slice(-5);if(!F.mes){F.mes=D.vendas.length?ultimoMes():'';R.mes=F.mes}
+  const ex=extLocal();if(!doCache&&(!ex||ex.versao!==RAW.extratoVersao)&&!PEDE_EXT&&navigator.onLine){PEDE_EXT=true;setTimeout(()=>{carregar().finally(()=>PEDE_EXT=false)},50)}
+  render()}
+// fila no próprio celular (IndexedDB): funciona sem sinal e envia sozinha quando conectar
+function idb(){return new Promise((ok,er)=>{const r=indexedDB.open('tecido',1);r.onupgradeneeded=()=>r.result.createObjectStore('fila',{keyPath:'id'});r.onsuccess=()=>ok(r.result);r.onerror=()=>er(r.error)})}
+async function idbOp(mode,fn){const db=await idb();return new Promise((ok,er)=>{const tx=db.transaction('fila',mode),req=fn(tx.objectStore('fila'));tx.oncomplete=()=>ok(req&&req.result);tx.onerror=()=>er(tx.error)})}
+async function filaInicia(){try{FILA=(await idbOp('readonly',st=>st.getAll()))||[];const old=JSON.parse(getStore('tec_fila')||'[]');for(const o of old){const it={id:Date.now()+'-'+Math.random().toString(36).slice(2,7),a:o.a,p:o.p,pin:PIN,api:API};FILA.push(it);await idbOp('readwrite',st=>st.put(it))}store('tec_fila')}catch(e){}}
 let ENV=false;
-async function processaFila(){if(ENV)return;let f=fila();if(!f.length)return;ENV=true;sync(true);
-  while(f.length){const it=f[0];try{const r=await call(it.a,it.p,true);f.shift();setFila(f);toast(r.msg||'Salvo');if(r.data&&!f.length)setD(r.data)}
-    catch(e){it.erro=/Sem conexão/.test(e.message)?'Sem conexão':e.message;if(!/Sem conexão/.test(e.message))toast('Erro: '+e.message);setFila(f);break}}
-  ENV=false;sync(false);render()}
-function acao(action,p,fechar=true){const f=fila();f.push({a:action,p});setFila(f);if(fechar)close_();toast('Salvando…');render();processaFila()}
-function vFila(){const f=fila();if(!f.length)return'';const err=f.find(x=>x.erro);return`<div class="fila"><span>${f.length} lançamento${f.length>1?'s':''} ${err?'não enviado — '+esc(err.erro):'sendo salvo…'}</span>${err?`<span><button onclick="processaFila()">Tentar de novo</button> <button style="background:none;color:#f0b48a;border:1px solid #6a2f20" onclick="if(confirm('Descartar os lançamentos pendentes?')){setFila([]);carregar(true)}">Descartar</button></span>`:''}</div>`}
+async function processaFila(){if(!FILA.length)return;sync(true);
+  if('serviceWorker' in navigator&&'SyncManager' in window){try{const reg=await navigator.serviceWorker.ready;await reg.sync.register('fila');return}catch(e){}}
+  if(ENV)return;ENV=true;
+  while(FILA.length){const it=FILA[0];let r;try{r=await call(it.a,Object.assign({},it.p,{_id:it.id}),true)}catch(e){if(/Sem conexão/.test(e.message))break;r={ok:false,erro:e.message}}await feito(it.id,r)}
+  ENV=false;sync(FILA.length>0)}
+async function feito(id,r){FILA=FILA.filter(x=>x.id!==id);try{await idbOp('readwrite',st=>st.delete(id))}catch(e){}
+  if(r.ok){toast(r.msg||'Salvo');if(r.data&&!FILA.length)setD(r.data);else{monta();render()}}else{toast('Não salvou: '+r.erro);monta();render()}if(!FILA.length)sync(false)}
+if('serviceWorker' in navigator)navigator.serviceWorker.addEventListener('message',e=>{const m=e.data||{};if(m.tipo==='feito'){FILA=FILA.filter(x=>x.id!==m.id);if(m.ok){toast(m.msg||'Salvo');if(m.data&&!FILA.length)setD(m.data);else{monta();render()}}else{toast('Não salvou: '+m.erro);monta();render()}if(!FILA.length)sync(false)}});
+window.addEventListener('online',()=>{if(FILA.length)processaFila();carregar()});
+function acao(action,p,fechar=true){const it={id:Date.now()+'-'+Math.random().toString(36).slice(2,7),a:action,p,pin:PIN,api:API};FILA.push(it);idbOp('readwrite',st=>st.put(it)).catch(()=>{});
+  if(fechar)close_();monta();render();toast(navigator.onLine?'Salvando…':'Salvo no celular · envia quando tiver sinal');processaFila()}
+function vFila(){if(!FILA.length)return'';return`<div class="fila"><span>${FILA.length} lançamento${FILA.length>1?'s':''} ${navigator.onLine?'sendo enviado…':'aguardando sinal (já está salvo no celular)'}</span>${navigator.onLine?`<button onclick="processaFila()">Enviar agora</button>`:''}</div>`}
+// aplica o lançamento na tela na hora, mesmo sem sinal
+const somaC=c=>Object.values(c||{}).reduce((s,n)=>s+(+n||0),0);
+function achaV(aba,linha){return D.vendas.find(x=>x.aba===aba&&x.linha===+linha)}
+function achaR(linha){return (D.inv.retiradas||[]).find(x=>x.linha===+linha)}
+function baixaEst(cores,kgv){const e=D.inv.estoque;for(const k in cores){e.cores[k]=(e.cores[k]||0)-cores[k];e.qtde-=cores[k]}e.kg-=(+kgv||0)}
+function excluir(i){const x=todas()[i],q=x.tipo==='pronta'?x.qtdEntregue:x.qtdPedido;
+  if(!confirm(`Excluir ${x.tipo==='pronta'?'a retirada':'o pedido'} de ${x.cliente} de ${dbr(x.data)} (${n0(q)} rolos)? Isso não tem volta.`))return;
+  if(x.tipo==='pronta')acao('excluirRetirada',{linha:x.linha,cliente:x.cliente,data:x.data});else acao('excluirPedido',{aba:x.aba,linha:x.linha,cliente:x.cliente,data:x.data})}
+function aplica(a,p){
+  if(a==='receberFornecedor'){const x=D.inv.pedidos.find(r=>r.linha===+p.linha);if(!x)return;const e=D.inv.estoque;for(const k of D.cores){const d=(p.cores[k]||0)-((x.entregue||{})[k]||0);if(d){e.cores[k]=(e.cores[k]||0)+d;e.qtde+=d}}e.kg+=(+p.kg||0)-(x.kgEntregue||0);
+    x.dataEntrega=p.data;x.entregue=p.cores;x.qtdEntregue=somaC(p.cores);x.kgEntregue=p.kg;x.statusEnt=Object.keys(x.pedido||{}).some(k=>(x.pedido[k]||0)>(p.cores[k]||0))?'parcial':'';return}
+  if(a==='encerrarFornecedor'){const x=D.inv.pedidos.find(r=>r.linha===+p.linha);if(x)x.statusEnt='encerrado';return}
+  if(a==='excluirPedido'){D.vendas=D.vendas.filter(x=>!(x.aba===p.aba&&x.linha===+p.linha));return}
+  if(a==='excluirRetirada'){const x=achaR(p.linha);if(x){const e=D.inv.estoque;for(const k in x.entregue){e.cores[k]=(e.cores[k]||0)+x.entregue[k];e.qtde+=x.entregue[k]}D.inv.retiradas=D.inv.retiradas.filter(r=>r!==x)}return}
+  if(a==='excluirPedidoFornecedor'){D.inv.pedidos=D.inv.pedidos.filter(r=>r.linha!==+p.linha);return}
+  if(a==='salvarPedido'&&!p.aba&&!p.forcar&&D.vendas.some(x=>!x.pend&&x.cliente===p.cliente&&x.data===p.data&&D.cores.every(k=>(x.pedido[k]||0)===(p.cores[k]||0))))return;
+  if(a==='salvarPedido'){const q=somaC(p.cores),pk=p.precoKg||D.padrao.precoKg,kp=q*D.padrao.kgRolo;let x=p.aba&&p.linha?achaV(p.aba,p.linha):null;
+    if(!x){x={tipo:'encomenda',aba:'',linha:0,protocolo:'(enviando)',entregue:{},qtdEntregue:0,kgEntregue:0,valorReal:0,recebido:0,pago:false,frete:0,fotos:[],rolos:[],pend:true};D.vendas.push(x)}
+    Object.assign(x,{data:p.data,cliente:p.cliente,precoKg:pk,pedido:p.cores,qtdPedido:q,kgPedido:kp,estimado:kp*pk,mes:(p.data||'').slice(0,7)});if(p.recebido!==''&&p.recebido!=null)x.recebido=+p.recebido;
+    if(!D.clientes.includes(p.cliente))D.clientes.push(p.cliente)}
+  else if(a==='registrarEntrega'){const x=achaV(p.aba,p.linha);if(!x)return;x.dataEntrega=p.data;x.entregue=p.cores;x.qtdEntregue=somaC(p.cores);x.kgEntregue=p.kg;x.valorReal=Math.round(p.kg*x.precoKg*100)/100;if(p.frete!=null)x.frete=+p.frete||0;
+    x.statusEnt=Object.keys(x.pedido||{}).some(k=>(x.pedido[k]||0)>(p.cores[k]||0))?'parcial':'';if(p.doEstoque){x.doEstoque=true;baixaEst(p.cores,p.kg)}}
+  else if(a==='pagamentoVenda'){const x=p.tipo==='pronta'?achaR(p.linha):achaV(p.aba,p.linha);if(!x)return;const novo=p.total!=null&&p.total!==''?+p.total:(x.recebido||0)+(+p.add||0);x.recebido=Math.round(novo*100)/100;if(x.tipo==='pronta'||x.valorReal)x.pago=novo>=totalV(x)-0.01;if(p.pagoFornecedor!=null)x.pagoFornecedor=!!p.pagoFornecedor}
+  else if(a==='novaRetirada'){let x=p.linha?achaR(p.linha):null;if(!x){x={tipo:'pronta',aba:D.inv.aba,linha:0,pago:false,recebido:0,fotos:[],rolos:[],pend:true};D.inv.retiradas.push(x);baixaEst(p.cores,p.kg)}
+    Object.assign(x,{cliente:p.cliente,data:p.data,mes:(p.data||'').slice(0,7),entregue:p.cores,qtdEntregue:somaC(p.cores),kgEntregue:p.kg,precoKg:p.precoKg,valorReal:Math.round(p.kg*p.precoKg*100)/100});if(p.frete!=null)x.frete=+p.frete||0}
+  else if(a==='salvarExtras'){const x=achaV(p.aba,p.linha);if(x&&p.status!=null)x.statusEnt=p.status}
+  else if(a==='salvarNF'){const x=p.tipo==='pronta'?achaR(p.linha):achaV(p.aba,p.linha);if(x)x.nfValor=p.valor}
+  else if(a==='salvarCliente'){const c=(D.cadastro=D.cadastro||[]);const ix=c.findIndex(z=>z.cliente.toLowerCase()===p.cliente.toLowerCase());if(ix>=0)c[ix]=Object.assign({},c[ix],p);else c.push(Object.assign({},p))}
+}
 function ir(t){if(t!==TAB){TAB=t;history.pushState({t},'')}window.scrollTo(0,0);render()}
-function render(){if(!D)return;document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===TAB));const v=$('#view');let h='';try{h=({inicio:vInicio,vendas:vVendas,estoque:vEstoque,credito:vCredito,relat:vRelat,clientes:vClientes})[TAB]()}catch(e){h='<p class="mut">Erro: '+esc(e.message)+'</p>'}v.innerHTML=vFila()+h}
+function render(){if(!D)return;document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===TAB));const v=$('#view');let h='';try{h=({inicio:vInicio,vendas:vVendas,estoque:vEstoque,credito:vCredito,relat:vRelat,clientes:vClientes,sugestao:vSugestao})[TAB]()}catch(e){h='<p class="mut">Erro: '+esc(e.message)+'</p>'}v.innerHTML=vFila()+h}
 // botão voltar do celular: fecha foto, câmera, janela; senão volta para a aba anterior
 let MST=[],SKIP=0;
 window.addEventListener('popstate',e=>{
@@ -204,10 +250,10 @@ function vInicio(){
   const c=D.credito,m=ultimoMes(),vm=todas().filter(x=>x.mes===m);
   const pend=pendentes();
   const rec=todas().reduce((s,x)=>s+aReceber(x),0);
-  const venc=c.aberto.filter(x=>x.dias<=3);
+  const venc=c.aberto.filter(x=>metaN(x)<=2);
   const pct=Math.min(100,c.usado/c.limite*100);
   let h='';
-  venc.forEach(x=>h+=`<div class="card alert ${x.dias<0?'bad':''}" onclick="ir('credito')"><b>${x.dias<0?'Nota vencida':'Nota vence '+(x.dias===0?'hoje':'em '+x.dias+' dia'+(x.dias>1?'s':''))}</b> · ${brl(x.valor)} (${dbr(x.venc)})</div>`);
+  venc.forEach(x=>{const m=metaN(x);h+=`<div class="card alert ${m<0||x.dias<0?'bad':''}" onclick="ir('credito')"><b>${x.dias<0?'Nota vencida':m<0?'Passou da meta de 10 dias':m===0?'Meta de 10 dias: pagar hoje':'Meta de 10 dias: pagar em '+m+' dia'+(m>1?'s':'')}</b> · ${brl(x.valor)} (até ${dbr(metaD(x))})</div>`});
   h+=`<div class="card" onclick="ir('credito')"><div class="row sp"><div><div class="k">Crédito fornecedor · em aberto</div><div class="big">${brl(c.valorAberto)}</div></div><div style="text-align:right"><div class="k">Disponível</div><div class="mid">${kg(c.disponivel)}</div></div></div><div class="bar"><i style="width:${pct}%"></i></div><div class="mut" style="font-size:13px">${kg(c.usado)} usados de ${kg(c.limite)}</div></div>`;
   h+=`<div class="grid2"><div class="card" onclick="ir('estoque')"><div class="k">Estoque livre</div><div class="mid">${n0(D.inv.estoque.qtde-comprometido().qtde)} rolos</div><div class="mut">${n0(D.inv.estoque.qtde)} total · ${n0(comprometido().qtde)} comprometidos</div></div>
   <div class="card"><div class="k">A entregar</div><div class="mid">${pend.length} pedidos</div><div class="mut">${n0(pend.reduce((s,x)=>s+faltaEnt(x).qtde,0))} rolos</div></div>
@@ -250,6 +296,7 @@ function tabCores(a,b,la,lb){
 }
 function detV(i){
   const x=todas()[i],s=statusV(x),dono=D.user.dono,fal=aReceber(x),rec=x.recebido||0;
+  if(x.pend)return open_(`<h2>${esc(x.cliente)}</h2><p class="mut">Lançamento ainda não enviado para a planilha. Assim que tiver sinal ele sobe sozinho; depois disso dá para editar.</p>`);
   let h=`<div class="row sp"><h2>${esc(x.cliente)}</h2><span class="pill ${s.c}">${s.t}</span></div>`;
   const fin=`<tr><td>Tecido</td><td>${brl(valorV(x))}</td></tr>${x.frete?`<tr><td>Frete</td><td>${brl(x.frete)}</td></tr>`:''}<tr><td><b>Total</b></td><td><b>${brl(totalV(x))}</b></td></tr><tr><td>Recebido</td><td>${brl(rec)}</td></tr>${fal>0.01?`<tr><td><b>Falta receber</b></td><td><b style="color:var(--warn)">${brl(fal)}</b></td></tr>`:rec-totalV(x)>0.01&&x.tipo!=='pronta'&&x.dataEntrega?`<tr><td>A devolver</td><td>${brl(rec-totalV(x))}</td></tr>`:''}${x.nfValor?`<tr><td>Valor na nota fiscal</td><td>${brl(x.nfValor)}</td></tr>`:''}${x.nf?`<tr><td>Nota fiscal (custo)</td><td>${brl(x.nf)}</td></tr>`:''}`;
   if(x.tipo==='pronta'){
@@ -267,6 +314,7 @@ function detV(i){
   if(entregue)h+=`<button class="btn wa" onclick="whatsV(${i},this)">WhatsApp + fotos${x.fotos&&x.fotos.length?' ('+x.fotos.length+')':''}</button>`;
   if(entregue)h+=`<div class="grid2"><button class="btn" style="margin:0" onclick="fPagto(${i})">Recebimento</button><button class="btn sec" style="margin:0" onclick="fNF(${i})">Nota fiscal</button></div>`;
   h+=x.tipo==='pronta'?`<button class="btn sec" onclick="fRetirada(${i})">Editar retirada</button>`:`<button class="btn sec" onclick="fEntrega(${i})">${x.dataEntrega?'Corrigir entrega':'Registrar entrega'}</button><button class="btn sec" onclick="fPedido(${i})">Editar pedido</button>`;
+  h+=`<button class="btn sec" style="color:var(--bad);border-color:#6a2f20" onclick="excluir(${i})">Excluir ${x.tipo==='pronta'?'retirada':'pedido'}</button>`;
   open_(h);
 }
 
@@ -295,7 +343,9 @@ function fPedido(i){
 }
 const num=s=>{s=String(s==null?'':s).trim();if(s.includes(','))s=s.replace(/\./g,'').replace(',','.');return +s||0};
 function sPedido(aba,linha){const c=val('fcli').trim();if(!c)return toast('Informe o cliente');const cores=lerCores('fc');if(!Object.keys(cores).length)return toast('Informe os rolos');
-  acao('salvarPedido',{aba,linha,cliente:c,data:val('fdt'),precoKg:num(val('fpk')),cores,recebido:val('frec')?num(val('frec')):''})}
+  const P={aba,linha,cliente:c,data:val('fdt'),precoKg:num(val('fpk')),cores,recebido:val('frec')?num(val('frec')):''};
+  if(!linha){const ig=D.vendas.find(x=>x.cliente===c&&x.data===P.data&&D.cores.every(k=>(x.pedido[k]||0)===(cores[k]||0)));if(ig){if(!confirm('Já existe um pedido igual de '+c+' nesse dia. Lançar outro mesmo assim?'))return;P.forcar=true}}
+  acao('salvarPedido',P)}
 let ROLOS=[];
 function blocoFotos(i){return `<div class="card" style="margin-top:12px"><div class="row sp"><div><div class="k">Etiquetas dos rolos</div><div class="mut" style="font-size:12px">Lê o peso e a cor, uma foto por vez</div></div>
   <div class="row"><button class="btn" style="width:auto;margin:0;padding:10px 12px" onclick="abrirCamera(${i})">📷 Câmera</button><label class="btn sec" style="width:auto;margin:0;padding:10px 12px;cursor:pointer">🖼<input type="file" accept="image/*" multiple style="display:none" onchange="addFotos(this.files,${i});this.value=''"></label></div></div>
@@ -466,7 +516,6 @@ function fCliente(nome){
   <div class="grid2"><div>${f('cidade','Cidade','SÃO PAULO')}</div><div>${f('uf','UF','SP')}</div></div>${f('tel','Telefone','')}${f('obs','Observação','')}
   <button class="btn" onclick="sCliente('${esc(nome)}')">Salvar cadastro</button>`)}
 function sCliente(nome){const p={};['cliente','razao','cnpj','ie','rua','bairro','cep','cidade','uf','tel','obs'].forEach(k=>{const e=$('#cl_'+k);if(e)p[k]=e.value.trim()});if(nome)p.cliente=nome;if(!p.cliente)return toast('Informe o nome');
-  const c=(D.cadastro=D.cadastro||[]);const ix=c.findIndex(z=>z.cliente.toLowerCase()===p.cliente.toLowerCase());if(ix>=0)c[ix]=Object.assign(c[ix],p);else c.push(p);
   acao('salvarCliente',p);if(NFX!=null&&$('#nftxt'))textoNF()}
 function fRetirada(i){
   const x=i!=null?todas()[i]:null;ROLOS=[];RESTO=false;
@@ -496,43 +545,128 @@ function vEstoque(){
   <div class="card"><table><tr><th>Cor</th><th>Total</th><th>Compr.</th><th>Livre</th></tr>`;
   D.cores.filter(k=>(k in e.cores)||cp.cores[k]).forEach(k=>{const t=e.cores[k]||0,c=cp.cores[k]||0,l=t-c;h+=`<tr><td><span class="dot" style="background:${COR_HEX[k]}"></span> ${k}</td><td>${t}</td><td style="color:var(--warn)">${c||'—'}</td><td style="font-weight:700;color:${l<0?'var(--bad)':'var(--ink)'}">${l}</td></tr>`});
   h+=`</table>`;
-  h+=`</div><div class="grid2" style="margin-top:10px"><button class="btn" style="margin:0" onclick="fRetirada()">+ Retirada</button><button class="btn sec" style="margin:0" onclick="fFornecedor()">+ Pedido fornecedor</button></div>`;
+  h+=`</div><div class="grid2" style="margin-top:10px"><button class="btn" style="margin:0" onclick="fRetirada()">+ Retirada</button><button class="btn sec" style="margin:0" onclick="fFornecedor()">+ Pedido fornecedor</button></div><button class="btn" style="margin-top:10px" onclick="ir('sugestao')">📈 Sugestão de pedido ao fornecedor</button>`;
   const ab=D.inv.pedidos.filter(p=>!p.dataEntrega);
   h+=`<div class="k" style="margin:16px 4px 6px">Pedidos ao fornecedor</div>`;
-  D.inv.pedidos.slice().reverse().forEach(p=>{const i=D.inv.pedidos.indexOf(p);h+=`<button class="item" onclick="fReceber(${i})"><div class="row sp"><b>${esc(p.protocolo)} · ${dbr(p.data)}</b><span class="pill ${p.dataEntrega?'ok':'pe'}">${p.dataEntrega?'Chegou '+dbr(p.dataEntrega):'Aguardando'}</span></div><div class="mut" style="font-size:13px">${n0(p.qtdPedido)} rolos pedidos · ${n0(p.qtdEntregue)} recebidos${p.kgEntregue?' · '+kg(p.kgEntregue):''}</div></button>`});
+  const cam={};let ct=0;D.inv.pedidos.forEach(p=>{const f=faltaF(p);if(f)for(const k in f.cores){cam[k]=(cam[k]||0)+f.cores[k];ct+=f.cores[k]}});
+  if(ct)h+=`<div class="card alert"><b>A caminho do fornecedor: ${n0(ct)} rolos</b><div class="mut" style="font-size:13px">${Object.entries(cam).map(([k,n])=>n+' '+k).join(' · ')}</div></div>`;
+  D.inv.pedidos.slice().reverse().forEach(p=>{const i=D.inv.pedidos.indexOf(p);h+=`<button class="item" onclick="fReceber(${i})"><div class="row sp"><b>${esc(p.protocolo)} · ${dbr(p.data)}</b><span class="pill ${p.dataEntrega&&!faltaF(p)?'ok':'pe'}">${p.dataEntrega?(faltaF(p)?'Falta chegar':'Chegou '+dbr(p.dataEntrega)):'Aguardando'}</span></div><div class="mut" style="font-size:13px">${n0(p.qtdPedido)} rolos pedidos · ${n0(p.qtdEntregue)} recebidos${p.kgEntregue?' · '+kg(p.kgEntregue):''}</div>${p.dataEntrega&&faltaF(p)?`<div style="font-size:12.5px;color:var(--warn);margin-top:2px">Falta chegar: ${faltaTxt(faltaF(p))}</div>`:''}</button>`});
   if(!D.inv.pedidos.length)h+='<p class="mut">Nenhum pedido.</p>';
   const rt=(D.inv.retiradas||[]).slice().reverse().slice(0,15);
   h+=`<div class="k" style="margin:16px 4px 6px">Últimas retiradas</div>`+rt.map(x=>x.baixa?`<div class="item" style="opacity:.7"><div class="row sp"><b>${esc(x.cliente)}</b><span class="pill">Baixa da encomenda</span></div><div class="mut" style="font-size:13px">${dbr(x.data)} · ${n0(x.qtdEntregue)} rolos</div></div>`:itemV(x)).join('');
   return h;
 }
-function fFornecedor(){
+function fFornecedor(cores){
   open_(`<h2>Pedido ao fornecedor</h2><p class="mut">Lança no bloco Pedido Solicitado do ${esc(D.inv.aba)}</p>
   <div class="grid2"><div><label>Data</label><input id="fdt" type="date" value="${hoje()}"></div><div><label>Preço/kg</label><input id="fpk" inputmode="decimal" value="${D.padrao.custoKg||''}"></div></div>
-  <label>Rolos por cor</label>${coresInput('fc')}<p class="mut" id="fres"></p>
+  <label>Rolos por cor</label>${coresInput('fc',cores)}<p class="mut" id="fres"></p>
   <button class="btn" onclick="acao('pedidoFornecedor',{data:val('fdt'),preco:num(val('fpk')),cores:lerCores('fc')})">Salvar pedido</button>`);
   const up=()=>{const t=Object.values(lerCores('fc')).reduce((a,b)=>a+b,0),k=t*D.padrao.kgRolo;$('#fres').textContent=`${t} rolos ≈ ${kg(k)} · crédito disponível ${kg(D.credito.disponivel)}`+(k>D.credito.disponivel?' ⚠️ passa do crédito':'')};
   $('#fc').addEventListener('input',up);up();
 }
-function fReceber(i){
-  const p=D.inv.pedidos[i];
-  open_(`<h2>Chegada · ${esc(p.protocolo)}</h2><p class="mut">Pedido de ${dbr(p.data)} · ${n0(p.qtdPedido)} rolos</p>
-  <label>Data que chegou</label><input id="fdt" type="date" value="${p.dataEntrega||hoje()}">
-  <label>Rolos recebidos por cor</label>${coresInput('fc',p.qtdEntregue?p.entregue:p.pedido)}
-  <label>Quilos recebidos (nota)</label><input id="fkg" inputmode="decimal" value="${p.kgEntregue||''}">
-  <label>Data da nota (faturamento)</label><input id="fnf" type="date" value="${p.dataEntrega||hoje()}">
-  <div class="check"><input type="checkbox" id="fcr" ${p.dataEntrega?'':'checked'}> Lançar no crédito (vence em 15 dias)</div>
-  <button class="btn" onclick="acao('receberFornecedor',{linha:${p.linha},data:val('fdt'),dataNF:val('fnf'),cores:lerCores('fc'),kg:num(val('fkg')),preco:${p.preco||0},credito:$('#fcr').checked})">Salvar chegada</button>`);
+let NFV=null,FRUP=()=>{};
+let FRESTO=false;
+function faltaF(p){const o={};let t=0;
+  if(!p.dataEntrega){for(const k in p.pedido){if(p.pedido[k]){o[k]=p.pedido[k];t+=p.pedido[k]}}}
+  else if(p.statusEnt==='parcial'){for(const k in p.pedido){const d=(p.pedido[k]||0)-((p.entregue||{})[k]||0);if(d>0){o[k]=d;t+=d}}}
+  return t?{cores:o,qtde:t}:null}
+function sChegada(i){const p=D.inv.pedidos[i],P={linha:p.linha,data:val('fdt'),dataNF:val('fnf'),cores:lerCores('fc'),kg:num(val('fkg')),preco:p.preco||0,credito:true,valorNF:NFV&&NFV.valor||0};
+  if(FRESTO){const c=Object.assign({},p.entregue);for(const k in P.cores)c[k]=(c[k]||0)+P.cores[k];P.kgParte=P.kg;P.kg=Math.round(((p.kgEntregue||0)+P.kg)*100)/100;P.cores=c;P.append=true}
+  acao('receberFornecedor',P)}
+function fReceber(i,resto){
+  const p=D.inv.pedidos[i];NFV=null;FRESTO=!!resto;const ff=faltaF(p);
+  open_(`<h2>${resto?'Restante':'Chegada'} · ${esc(p.protocolo)}</h2><p class="mut">Pedido de ${dbr(p.data)} · ${n0(p.qtdPedido)} rolos${p.dataEntrega?' · já chegaram '+n0(p.qtdEntregue):''}</p>${!resto&&p.dataEntrega&&ff?`<div class="card alert"><b>Falta chegar: ${faltaTxt(ff)}</b><div class="grid2" style="margin-top:10px"><button class="btn" style="margin:0" onclick="fReceber(${i},true)">Receber o restante</button><button class="btn sec" style="margin:0" onclick="if(confirm('Encerrar? O que falta não vem mais.'))acao('encerrarFornecedor',{linha:${p.linha}})">Encerrar</button></div></div>`:''}
+  <div class="card" style="margin-top:10px"><div class="row sp"><div><div class="k">Nota fiscal do fornecedor</div><div class="mut" style="font-size:12px" id="nfres">Foto ou PDF da nota: preenche os quilos e a data de faturamento</div></div><label class="btn" style="width:auto;margin:0;padding:10px 12px;cursor:pointer">📄 Ler nota<input type="file" accept="image/*,application/pdf" style="display:none" onchange="lerNF(this.files[0]);this.value=''"></label></div></div>
+  <label>Data que chegou</label><input id="fdt" type="date" value="${resto?hoje():(p.dataEntrega||hoje())}">
+  <label>${resto?'Rolos que chegaram agora':'Rolos recebidos por cor'}</label>${coresInput('fc',resto?ff.cores:(p.qtdEntregue?p.entregue:p.pedido))}
+  <label>${resto?'Quilos desta chegada (nota)':'Quilos recebidos (nota)'}</label><input id="fkg" inputmode="decimal" value="${resto?'':(p.kgEntregue||'')}">
+  <label>Data da nota (faturamento)</label><input id="fnf" type="date" value="${resto?hoje():(p.dataEntrega||hoje())}">
+  <p class="mut" id="fcrinfo" style="font-size:13px"></p>
+  <button class="btn" onclick="sChegada(${i})">Salvar chegada</button>
+  <button class="btn sec" style="color:var(--bad);border-color:#6a2f20" onclick="if(confirm('Excluir o pedido ao fornecedor de ${dbr(p.data)} (${n0(p.qtdPedido)} rolos)? Isso não tem volta.'))acao('excluirPedidoFornecedor',{linha:${p.linha},data:'${p.data}'})">Excluir pedido do fornecedor</button>`);
+  const pk=p.preco||D.padrao.custoKg||0,up=()=>{const k=num(val('fkg')),nf=val('fnf');const v=nf?dbr(new Date(new Date(nf+'T12:00').getTime()+15*864e5).toISOString().slice(0,10)):'';
+    $('#fcrinfo').textContent=NFV&&NFV.valor?`Entra no crédito sozinho: ${brl(NFV.valor)} (valor da nota) · ${kg(k)} · vence ${v}`:k?`Entra no crédito sozinho: ${kg(k)}${pk?' × '+brl(pk)+' = '+brl(k*pk):''} · vence ${v}`:'O crédito do fornecedor é lançado sozinho com os quilos recebidos.'};
+  FRUP=up;$('#fkg').addEventListener('input',up);$('#fnf').addEventListener('input',up);up();
 }
+
+function arquivoB64(file){return new Promise((ok,er)=>{const r=new FileReader();r.onload=()=>ok(String(r.result).split(',')[1]);r.onerror=er;r.readAsDataURL(file)})}
+function fotoB64(file){return new Promise((ok,er)=>{const img=new Image();img.onload=()=>{const M=2400,sc=Math.min(1,M/Math.max(img.width,img.height)),c=document.createElement('canvas');c.width=Math.round(img.width*sc);c.height=Math.round(img.height*sc);c.getContext('2d').drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(img.src);ok(c.toDataURL('image/jpeg',.9).split(',')[1])};img.onerror=er;img.src=URL.createObjectURL(file)})}
+async function lerNF(file){if(!file)return;const pdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name);
+  if(pdf&&file.size>8e6)return toast('PDF muito grande');
+  $('#nfres').textContent='Lendo a nota…';
+  try{const b64=pdf?await arquivoB64(file):await fotoB64(file);const r=(await call('lerNF',{b64,mime:pdf?'application/pdf':'image/jpeg'})).r;NFV=r;
+    if(r.kg)$('#fkg').value=String(r.kg).replace('.',',');if(r.data)$('#fnf').value=r.data;
+    $('#nfres').innerHTML=(r.kg||r.data)?`<b style="color:var(--ok)">Nota lida${r.numero?' nº '+esc(r.numero):''}</b> · faturada ${dbr(r.data)} · ${r.kg?kg(r.kg):'kg ?'}${r.valor?' · '+brl(r.valor):''}${r.volumes?' · '+r.volumes+' volumes':''}<br>Confira antes de salvar.`:'<span style="color:var(--bad)">Não achei o peso nem a data. Digite abaixo.</span>';
+    FRUP()}
+  catch(e){$('#nfres').innerHTML='<span style="color:var(--bad)">'+esc(e.message)+'. Digite os dados abaixo.</span>'}}
+
+const difD=(a,b)=>Math.round((new Date(a+'T12:00')-new Date(b+'T12:00'))/864e5);
+function fPagarNota(linha,data,venc,valor){
+  open_(`<h2>Pagar nota</h2><p class="mut">Nota de ${dbr(data)} · ${brl(valor)} · vence ${dbr(venc)}</p>
+  <label>Data em que pagou</label><input id="fpe" type="date" value="${hoje()}"><p class="mut" id="fpeinfo" style="font-size:13px"></p>
+  <button class="btn" onclick="acao('pagarNota',{linha:${linha},pago:true,pagoEm:val('fpe')})">Confirmar pagamento</button>`);
+  const up=()=>{const d=val('fpe');if(!d)return;const a=difD(d,data),b=difD(venc,d);$('#fpeinfo').textContent=`Quitou ${a} dia${a===1?'':'s'} depois da compra · ${b>=0?b+' dia'+(b===1?'':'s')+' antes do vencimento':(-b)+' dia'+(b===-1?'':'s')+' depois do vencimento'}`};
+  $('#fpe').addEventListener('input',up);up()}
+
+const META_PAG=10;
+const addD=(d,n)=>{const x=new Date(d+'T12:00');x.setDate(x.getDate()+n);return x.toISOString().slice(0,10)};
+const metaD=x=>addD(x.data,META_PAG),metaN=x=>difD(metaD(x),hoje());
+// ---- SUGESTÃO DE PEDIDO: consumo de cada cliente + estoque + atraso e falhas do fornecedor ----
+let SG={sem:6,ciclo:7,margem:15};
+function entregasJanela(dias){const ini=addD(hoje(),-dias),L=[];
+  D.vendas.forEach(x=>{if(x.dataEntrega&&x.dataEntrega>=ini&&!INTERNO.test(x.cliente))L.push({cli:x.cliente,data:x.dataEntrega,cores:x.entregue||{}})});
+  (D.inv.retiradas||[]).forEach(x=>{if(!x.baixa&&x.data>=ini&&!INTERNO.test(x.cliente))L.push({cli:x.cliente,data:x.data,cores:x.entregue||{}})});
+  return L}
+function sugestao(){
+  const W=SG.sem,dias=W*7,L=entregasJanela(dias),cores=D.cores;
+  // prazo do fornecedor (pedido → chegada) e confiabilidade por cor nos últimos pedidos
+  const ped=D.inv.pedidos.filter(p=>p.dataEntrega&&p.data);const lts=ped.slice(-6).map(p=>Math.max(0,difD(p.dataEntrega,p.data)));
+  const ltMed=lts.length?lts.reduce((a,b)=>a+b,0)/lts.length:2,ltMax=lts.length?Math.max(...lts):3;
+  const conf={},falhas={};cores.forEach(k=>{const ps=ped.filter(p=>p.pedido[k]).slice(-3);const pd=ps.reduce((s,p)=>s+p.pedido[k],0),rc=ps.reduce((s,p)=>s+((p.entregue||{})[k]||0),0);conf[k]=pd?rc/pd:1;falhas[k]=ps.filter(p=>!((p.entregue||{})[k])).length});
+  // consumo semanal por cor (média e variação)
+  const sem={};cores.forEach(k=>sem[k]=Array(W).fill(0));
+  L.forEach(e=>{const w=Math.min(W-1,Math.floor(difD(hoje(),e.data)/7));for(const k in e.cores)if(sem[k])sem[k][w]+=e.cores[k]});
+  const cobrir=SG.ciclo+ltMax,z=1.3,cp=comprometido(),est=D.inv.estoque.cores,cam={};
+  D.inv.pedidos.forEach(p=>{const f=faltaF(p);if(f)for(const k in f.cores)cam[k]=(cam[k]||0)+f.cores[k]});
+  const linhas=cores.map(k=>{const v=sem[k],mu=v.reduce((a,b)=>a+b,0)/W,sd=Math.sqrt(v.reduce((a,b)=>a+(b-mu)*(b-mu),0)/W);
+    const prev=mu/7*cobrir,seg=z*sd*Math.sqrt(cobrir/7),r=Math.max(conf[k],0);
+    const disp=(est[k]||0)-(cp.cores[k]||0)+(cam[k]||0)*Math.min(1,r);
+    let q=(prev+seg)*(1+SG.margem/100)-disp;if(r<0.95&&q>0)q=q/Math.max(r,0.5);q=Math.max(0,Math.ceil(q));
+    return{k,mu,sd,prev,seg,disp,conf:conf[k],falhas:falhas[k],cam:cam[k]||0,q}}).filter(l=>l.mu>0||l.q>0||l.cam>0);
+  // clientes
+  const by={};L.forEach(e=>{const b=by[e.cli]=by[e.cli]||{datas:new Set(),cores:{}};b.datas.add(e.data);for(const k in e.cores)b.cores[k]=(b.cores[k]||0)+e.cores[k]});
+  const clis=Object.entries(by).map(([c,b])=>{const ds=[...b.datas].sort(),n=ds.length,int=n>1?difD(ds[n-1],ds[0])/(n-1):7*W;
+    const porVez={};for(const k in b.cores)porVez[k]=Math.round(b.cores[k]/n);return{c,n,freq:n/W,int,ult:ds[n-1],prox:addD(ds[n-1],Math.round(int)),porVez,tot:Object.values(b.cores).reduce((a,x)=>a+x,0)}}).sort((a,b)=>b.tot-a.tot);
+  return{linhas,clis,ltMed,ltMax,cobrir}}
+function vSugestao(){
+  const S=sugestao(),tot=S.linhas.reduce((s,l)=>s+l.q,0),kgT=tot*D.padrao.kgRolo,cred=D.credito.disponivel;
+  const sel=(id,ops,v)=>`<select onchange="SG.${id}=+this.value;render()">${ops.map(o=>`<option value="${o[0]}" ${o[0]===v?'selected':''}>${o[1]}</option>`).join('')}</select>`;
+  let h=`<button class="tog" style="margin-bottom:10px;background:none;border:1px solid var(--line);border-radius:6px;padding:6px 10px;color:var(--acc)" onclick="history.back()">‹ Voltar</button>
+  <div class="card"><div class="k">Sugestão de pedido ao fornecedor</div><div class="mut" style="font-size:12.5px;margin-top:4px">Baseado no que cada cliente pegou, no estoque livre, no que está a caminho, no prazo do fornecedor (média ${n0(S.ltMed)}d, até ${n0(S.ltMax)}d) e nas cores que ele deixou de mandar.</div>
+  <div class="grid2" style="grid-template-columns:repeat(3,1fr);margin-top:10px"><div><label>Histórico</label>${sel('sem',[[4,'4 semanas'],[6,'6 semanas'],[8,'8 semanas'],[12,'12 semanas']],SG.sem)}</div><div><label>Próximo pedido em</label>${sel('ciclo',[[3,'3 dias'],[5,'5 dias'],[7,'7 dias'],[10,'10 dias'],[14,'14 dias']],SG.ciclo)}</div><div><label>Margem extra</label>${sel('margem',[[0,'0%'],[10,'10%'],[15,'15%'],[25,'25%'],[40,'40%']],SG.margem)}</div></div></div>`;
+  h+=`<div class="card"><div class="row sp"><div><div class="k">Pedir agora</div><div class="big">${n0(tot)} rolos</div><div class="mut" style="font-size:13px">≈ ${kg(kgT)} · cobre ${S.cobrir} dias</div></div><div style="text-align:right"><div class="k">Crédito disponível</div><div class="mid" style="color:${kgT>cred?'var(--bad)':'var(--ok)'}">${kg(cred)}</div>${kgT>cred?'<div style="color:var(--bad);font-size:12px">passa do crédito</div>':''}</div></div>
+  <table style="margin-top:10px"><tr><th style="text-align:left">Cor</th><th>Sai/sem</th><th>Livre</th><th>Pedir</th></tr>${S.linhas.map(l=>`<tr><td><span class="dot" style="background:${COR_HEX[l.k]}"></span> ${l.k}${l.conf<0.95?` <span style="color:var(--warn);font-size:11px">⚠ veio ${Math.round(l.conf*100)}%</span>`:''}</td><td>${l.mu.toFixed(1).replace('.',',')}</td><td style="color:${l.disp<0?'var(--bad)':'inherit'}">${n0(l.disp)}</td><td><b style="font-size:16px">${l.q||'—'}</b></td></tr>`).join('')}</table>
+  ${S.linhas.filter(l=>l.falhas>=2).map(l=>`<div class="mut" style="font-size:12.5px;color:var(--warn);margin-top:8px">⚠ ${l.k}: o fornecedor não mandou nos últimos ${l.falhas} pedidos. Já aumentei a quantidade. Vale pedir com antecedência ou cobrar o fornecedor.</div>`).join('')}
+  <button class="btn" style="margin-top:12px" onclick="fFornecedor(${esc(JSON.stringify(Object.fromEntries(S.linhas.filter(l=>l.q).map(l=>[l.k,l.q]))))})">Fazer pedido com essa sugestão</button>
+  <p class="mut" style="font-size:12px;margin:8px 0 0">"Livre" = estoque − pedidos de clientes ainda não entregues + o que está a caminho. Você pode ajustar as quantidades antes de salvar.</p></div>`;
+  h+=`<div class="k" style="margin:14px 4px 6px">O que cada cliente costuma pegar (últimas ${SG.sem} semanas)</div>`;
+  h+=S.clis.map(c=>{const atras=c.prox<hoje();return `<div class="card"><div class="row sp"><b style="font:800 17px var(--serif)">${esc(c.c)}</b><span class="pill ${atras?'warn':'pe'}">${c.freq>=0.9?'~'+n0(c.freq)+'x por semana':'a cada ~'+n0(c.int)+' dias'}</span></div>
+    <div class="mut" style="font-size:13px;margin-top:4px">Por vez: ${Object.entries(c.porVez).filter(([k,n])=>n).map(([k,n])=>n+' '+k).join(' · ')||'—'}</div>
+    <div style="font-size:13px;margin-top:4px">Última: ${dbr(c.ult)} · próxima provável: <b style="color:${atras?'var(--warn)':'inherit'}">${dbr(c.prox)}${atras?' (já passou)':''}</b></div></div>`}).join('')||'<p class="mut">Sem entregas no período.</p>';
+  return h}
 
 /* ---- CRÉDITO ---- */
 function vCredito(){
   const c=D.credito,pct=Math.min(100,c.usado/c.limite*100);
   let h=`<div class="card"><div class="row sp"><div><div class="k">Em aberto</div><div class="big">${brl(c.valorAberto)}</div></div><div style="text-align:right"><div class="k">Disponível</div><div class="mid">${kg(c.disponivel)}</div></div></div><div class="bar"><i style="width:${pct}%"></i></div><div class="row sp mut" style="font-size:13px"><span>Usado ${kg(c.usado)}</span><span>Limite ${kg(c.limite)}</span></div></div>
-  <button class="btn sec" style="margin:0 0 6px" onclick="fCredito()">+ Lançar nota no crédito</button>
+  <button class="btn sec" style="margin:0 0 6px" onclick="fCredito()">+ Lançamento manual (só se precisar)</button>
   <div class="k" style="margin:16px 4px 6px">Notas em aberto · prazo 15 dias</div>`;
-  c.aberto.slice().sort((a,b)=>a.venc<b.venc?-1:1).forEach(x=>{const cl=x.dias<0?'bad':x.dias<=3?'warn':'';h+=`<div class="card ${cl?'alert '+cl:''}"><div class="row sp"><b style="font:800 20px var(--serif)">${brl(x.valor)}</b><span class="pill ${cl||'pe'}">${x.dias<0?'Vencida há '+(-x.dias)+'d':x.dias===0?'Vence hoje':'Vence '+dbr(x.venc)+' · '+x.dias+'d'}</span></div><div class="mut" style="font-size:13px;margin:4px 0 2px">Nota de ${dbr(x.data)} · ${kg(x.restante)}${x.obs?' · '+esc(x.obs):''}</div><button class="btn" style="margin-top:10px;padding:10px" onclick="if(confirm('Marcar nota de ${brl(x.valor)} como paga?'))acao('pagarNota',{linha:${x.linha},pago:true},false)">Marcar como paga</button></div>`});
+  const pg=c.lanc.filter(l=>l.pago&&l.pagoEm&&/compra|nota/i.test(l.tipo));
+  if(pg.length){const m1=pg.reduce((s,l)=>s+difD(l.pagoEm,l.data),0)/pg.length,m2=pg.filter(l=>l.venc).reduce((s,l)=>s+difD(l.venc,l.pagoEm),0)/Math.max(1,pg.filter(l=>l.venc).length);
+    h=h.replace('<button class="btn sec" style="margin:0 0 6px"',`<div class="card"><div class="k">Seu prazo de pagamento</div><div class="mid">${n0(m1)} dias</div><div class="mut" style="font-size:13px">em média da compra até quitar · meta ${META_PAG} dias ${m1<=META_PAG?'✓':'— acima da meta'} · ${n0(m2)} dias antes do vencimento (${pg.length} notas)</div></div><button class="btn sec" style="margin:0 0 6px"`)}
+  c.aberto.slice().sort((a,b)=>a.venc<b.venc?-1:1).forEach(x=>{const cl=x.dias<0||metaN(x)<0?'bad':metaN(x)<=2?'warn':'';h+=`<div class="card ${cl?'alert '+cl:''}"><div class="row sp"><b style="font:800 20px var(--serif)">${brl(x.valor)}</b><span class="pill ${cl||'pe'}">${x.dias<0?'Vencida há '+(-x.dias)+'d':x.dias===0?'Vence hoje':'Vence '+dbr(x.venc)+' · '+x.dias+'d'}</span></div><div class="mut" style="font-size:13px;margin:4px 0 2px">Nota de ${dbr(x.data)} · ${kg(x.restante)}${x.obs?' · '+esc(x.obs):''}</div><div style="font-size:13px;font-weight:600;color:${metaN(x)<0?'var(--bad)':metaN(x)<=2?'var(--warn)':'var(--ok)'}">Meta 10 dias: pagar até ${dbr(metaD(x))} · ${metaN(x)<0?'passou '+(-metaN(x))+'d':'faltam '+metaN(x)+'d'}</div><button class="btn" style="margin-top:10px;padding:10px" onclick="fPagarNota(${x.linha},'${x.data}','${x.venc}',${x.valor})">Marcar como paga</button></div>`});
   if(!c.aberto.length)h+='<p class="mut">Nenhuma nota em aberto.</p>';
-  h+=`<div class="k" style="margin:16px 4px 6px">Histórico</div><div class="card"><table><tr><th>Nota</th><th>Valor</th><th>Venc.</th><th></th></tr>${c.lanc.map(l=>`<tr><td>${dbr(l.data)}</td><td>${brl(l.valor)}</td><td>${dbr(l.venc)}</td><td>${l.pago?`<span class="pill ok">Paga</span>`:/pagamento/i.test(l.tipo)?`<span class="pill">Pagto</span>`:`<span class="pill warn">Aberta</span>`}</td></tr>`).join('')}</table></div>`;
+  h+=`<div class="k" style="margin:16px 4px 6px">Histórico</div><div class="card"><table><tr><th>Nota</th><th>Valor</th><th>Venc.</th><th></th></tr>${c.lanc.map(l=>`<tr><td>${dbr(l.data)}</td><td>${brl(l.valor)}</td><td>${dbr(l.venc)}</td><td>${l.pago?`<span class="pill ok">Paga ${dbr(l.pagoEm)}${l.pagoEm?' · '+difD(l.pagoEm,l.data)+'d':''}</span>`:/pagamento/i.test(l.tipo)?`<span class="pill">Pagto</span>`:`<span class="pill warn">Aberta</span>`}</td></tr>`).join('')}</table></div>`;
   return h;
 }
 function fCredito(){
@@ -563,7 +697,7 @@ function vRelat(){
   // por cor
   const bc={};l.forEach(x=>{for(const k in x.entregue||{})bc[k]=(bc[k]||0)+x.entregue[k]});
   h+=`<div class="card"><div class="k" style="margin-bottom:6px">Rolos entregues por cor</div><table>${D.cores.filter(k=>bc[k]).sort((a,b)=>bc[b]-bc[a]).map(k=>`<tr><td><span class="dot" style="background:${COR_HEX[k]}"></span> ${k}</td><td>${bc[k]}</td></tr>`).join('')}</table></div>`;
-  return h+`<button class="btn sec" onclick="store('tec_pin');location.reload()">Sair</button>`;
+  return h+`<button class="btn sec" onclick="if(confirm('Recalcular o histórico dos meses fechados? Use só se você mudou meses antigos direto na planilha.'))acao('recalcular',{},false)">Recalcular histórico</button><button class="btn sec" onclick="if(FILA.length&&!confirm('Tem lançamentos ainda não enviados. Sair mesmo assim?'))return;store('tec_pin');location.reload()">Sair</button>`;
 }
 
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
