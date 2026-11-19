@@ -280,7 +280,7 @@ function vVendas(){
   const ms=meses();
   if(['aberto','A entregar','A receber','Concluído'].indexOf(F.st)<0)F.st='aberto';
   const conc=F.st==='Concluído',fim=x=>statusV(x).t==='Concluído';
-  const base=todas().filter(x=>(!F.cli||x.cliente===F.cli)&&(F.tipo==='todos'||x.tipo===F.tipo));
+  const base=todas().filter(x=>!INTERNO.test(x.cliente)&&(!F.cli||x.cliente===F.cli)&&(F.tipo==='todos'||x.tipo===F.tipo));
   let l=base.filter(x=>conc?(fim(x)&&(!F.mes||x.mes===F.mes)):F.st==='A entregar'?!!faltaEnt(x):F.st==='A receber'?aReceber(x)>0.01:!fim(x));
   const nConc=base.filter(fim).length;
   l.sort((a,b)=>(b.data||'')<(a.data||'')?-1:1);
@@ -561,9 +561,17 @@ function vEstoque(){
   h+=`<div class="k" style="margin:16px 4px 6px">Últimas retiradas</div>`+rt.map(x=>x.baixa?`<div class="item" style="opacity:.7"><div class="row sp"><b>${esc(x.cliente)}</b><span class="pill">Baixa da encomenda</span></div><div class="mut" style="font-size:13px">${dbr(x.data)} · ${n0(x.qtdEntregue)} rolos</div></div>`:itemV(x)).join('');
   return h;
 }
+function projetar(){const S=sugestao(),tot=S.linhas.reduce((a,l)=>a+l.q,0);
+  document.querySelectorAll('#fc input').forEach(i=>{const l=S.linhas.find(z=>z.k===i.dataset.c);i.value=l&&l.q?l.q:''});$('#fc').dispatchEvent(new Event('input'));
+  $('#fproj').innerHTML=`<div class="mut" style="font-size:12.5px;margin:8px 0 6px">Fornecedor leva em média ${n0(S.ltMed)} dia(s), até ${n0(S.ltMax)} · o pedido cobre ${S.cobrir} dias · últimas ${SG.sem} semanas de entregas</div>
+  <table><tr><th style="text-align:left">Cor</th><th>Sai/sem</th><th>Livre</th><th>A caminho</th><th>Pedir</th></tr>${S.linhas.map(l=>`<tr><td><span class="dot" style="background:${COR_HEX[l.k]}"></span> ${l.k}${l.conf<0.95?` <span style="color:var(--warn);font-size:11px">⚠ veio ${Math.round(l.conf*100)}%</span>`:''}</td><td>${l.mu.toFixed(1).replace('.',',')}</td><td style="color:${l.disp<0?'var(--bad)':'inherit'}">${n0(l.disp-l.cam*Math.min(1,l.conf))}</td><td>${l.cam||'—'}</td><td><b>${l.q||'—'}</b></td></tr>`).join('')}</table>
+  ${S.linhas.filter(l=>l.falhas>=2).map(l=>`<div style="font-size:12.5px;color:var(--warn);margin-top:6px">⚠ ${l.k}: faltou nos últimos ${l.falhas} pedidos, já aumentei.</div>`).join('')}
+  <div style="font-size:13px;margin-top:8px"><b>${n0(tot)} rolos</b> preenchidos abaixo · ajuste o que quiser antes de salvar.</div>`}
 function fFornecedor(cores){
   open_(`<h2>Pedido ao fornecedor</h2><p class="mut">Lança no bloco Pedido Solicitado do ${esc(D.inv.aba)}</p>
   <div class="grid2"><div><label>Data</label><input id="fdt" type="date" value="${hoje()}"></div><div><label>Preço/kg</label><input id="fpk" inputmode="decimal" value="${D.padrao.custoKg||''}"></div></div>
+  <div class="card" style="margin-top:10px"><div class="row sp"><div><div class="k">Projeção do pedido</div><div class="mut" style="font-size:12px">Estoque + entregas recentes + prazo do fornecedor</div></div><button class="btn" style="width:auto;margin:0;padding:10px 12px" onclick="projetar()">📈 Calcular</button></div>
+  <div class="row" style="gap:8px;margin-top:8px;font-size:13px"><span class="mut">Próximo pedido em</span><select id="fciclo" style="width:auto" onchange="SG.ciclo=+this.value;projetar()">${[3,5,7,10,14].map(d=>`<option value="${d}" ${d===SG.ciclo?'selected':''}>${d} dias</option>`).join('')}</select></div><div id="fproj"></div></div>
   <label>Rolos por cor</label>${coresInput('fc',cores)}<p class="mut" id="fres"></p>
   <button class="btn" onclick="acao('pedidoFornecedor',{data:val('fdt'),preco:num(val('fpk')),cores:lerCores('fc')})">Salvar pedido</button>`);
   const up=()=>{const t=Object.values(lerCores('fc')).reduce((a,b)=>a+b,0),k=t*D.padrao.kgRolo;$('#fres').textContent=`${t} rolos ≈ ${kg(k)} · crédito disponível ${kg(D.credito.disponivel)}`+(k>D.credito.disponivel?' ⚠️ passa do crédito':'')};
