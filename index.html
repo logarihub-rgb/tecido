@@ -433,7 +433,7 @@ function somaRolos(){
 const PIX='\n\n*PIX para pagamento*\nChave: logari.hub@gmail.com\nManuel Alves do Carmo\nBanco BTG';
 function msgCliente(x,o){
   const q=Object.values(o.cores).reduce((a,b)=>a+b,0),v=Math.round(o.kg*o.preco*100)/100,tot=v+(o.frete||0),rec=o.rec||0;
-  let t=`Olá, ${x.cliente}! Segue o fechamento ${x.tipo==='pronta'?'da retirada de '+dbr(o.data):'do pedido '+x.protocolo}:\n\n`;
+  let t=`Olá, ${x.cliente}! Segue o fechamento ${x.tipo==='pronta'?'da retirada de '+dbr(o.data):o.resto?'da entrega restante do pedido '+x.protocolo+' (a entrega anterior já está paga)':'do pedido '+x.protocolo}:\n\n`;
   t+=Object.entries(o.cores).map(([c,n])=>`• ${c}: ${n} rolo${n>1?'s':''}`).join('\n');
   t+=`\n\nTotal: ${q} rolos · ${kg(o.kg)} (peso líquido)\nPreço: ${brl(o.preco)}/kg\nTecido: ${brl(v)}`;
   if(o.frete)t+=`\nFrete: ${brl(o.frete)}`;
@@ -453,8 +453,8 @@ async function compartilha(t,b64s){
 }
 function whatsForm(i,btn){const x=todas()[i],k=num(val('fkg'));if(!k)return toast('Informe os quilos');
   const b=ROLOS.filter(r=>r.b64).map(r=>r.b64);
-  const rec=RESTO&&$('#fde')?Math.max(0,(x.recebido||0)-totalV(x)):(x.recebido||0);
-  compartilha(msgCliente(x,{cores:lerCores('fc'),kg:k,preco:x.precoKg||num(val('fpk')),frete:num(val('ffr')),rec,data:val('fdt'),fotos:b.length}),b)}
+  const rec=RESTO?Math.max(0,Math.round(((x.recebido||0)-totalV(x))*100)/100):(x.recebido||0);
+  compartilha(msgCliente(x,{cores:lerCores('fc'),kg:k,preco:x.precoKg||num(val('fpk')),frete:num(val('ffr')),rec,data:val('fdt'),fotos:b.length,resto:RESTO}),b)}
 let FOTOS_CACHE={};
 async function whatsV(i,btn){const x=todas()[i];
   const o={cores:x.entregue,kg:x.kgEntregue,preco:x.precoKg,frete:x.frete,rec:x.recebido||0,data:x.data||x.dataEntrega,fotos:(x.fotos||[]).length};
