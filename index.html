@@ -440,7 +440,6 @@ function msgCliente(x,o){
   t+=`\n*Total: ${brl(tot)}*`;
   const dif=rec-tot;
   if(rec>0)t+=`\n\nJá pago: ${brl(rec)}\n${dif>=0.01?'*A devolver: '+brl(dif)+'*':dif<=-0.01?'*Falta pagar: '+brl(-dif)+'*':'Tudo pago, obrigado!'}`;
-  if(o.fotos)t+=`\n\nAs fotos das etiquetas vão junto como comprovante do peso.`;
   if(dif<=-0.01||!rec)t+=PIX;
   return t;
 }
