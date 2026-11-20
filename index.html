@@ -194,6 +194,11 @@ function excluir(i){const x=todas()[i],q=x.tipo==='pronta'?x.qtdEntregue:x.qtdPe
   if(!confirm(`Excluir ${x.tipo==='pronta'?'a retirada':'o pedido'} de ${x.cliente} de ${dbr(x.data)} (${n0(q)} rolos)? Isso não tem volta.`))return;
   if(x.tipo==='pronta')acao('excluirRetirada',{linha:x.linha,cliente:x.cliente,data:x.data});else acao('excluirPedido',{aba:x.aba,linha:x.linha,cliente:x.cliente,data:x.data})}
 function aplica(a,p){
+  if(/^nf(Recebido|Repasse|Registrar|SaldoInicial)$/.test(a)){const C=D.nfCaixa=D.nfCaixa||{saldo:0,aReceber:0,itens:[]};
+    if(a==='nfRecebido'){const x=C.itens.find(y=>y.linha===+p.linha);if(x&&x.status==='A receber'){x.status='Recebido';x.em=hoje();C.saldo+=x.valor;C.aReceber-=x.valor}}
+    else if(a==='nfRepasse'){C.saldo-=p.valor;C.itens.unshift({cliente:'Repasse da NF',valor:-p.valor,status:'Repasse',data:hoje(),em:hoje()})}
+    else if(a==='nfRegistrar'){const ref=p.aba+'|'+p.linha,v=Math.round(p.valorNota*0.01*100)/100,x=C.itens.find(y=>y.ref===ref&&y.status==='A receber');if(x){C.aReceber+=v-x.valor;x.valor=v}else{C.itens.unshift({ref,cliente:p.cliente,nota:p.valorNota,valor:v,status:'A receber',data:hoje(),linha:0});C.aReceber+=v}}
+    C.saldo=Math.round(C.saldo*100)/100;C.aReceber=Math.round(C.aReceber*100)/100;return}
   if(a==='foraProjecao'){D.fora=(D.fora||[]).filter(c=>c!==p.cliente);if(p.fora)D.fora.push(p.cliente);return}
   if(a==='receberFornecedor'){const x=D.inv.pedidos.find(r=>r.linha===+p.linha);if(!x)return;const e=D.inv.estoque;for(const k of D.cores){const d=(p.cores[k]||0)-((x.entregue||{})[k]||0);if(d){e.cores[k]=(e.cores[k]||0)+d;e.qtde+=d}}e.kg+=(+p.kg||0)-(x.kgEntregue||0);
     x.dataEntrega=p.data;x.entregue=p.cores;x.qtdEntregue=somaC(p.cores);x.kgEntregue=p.kg;x.statusEnt=Object.keys(x.pedido||{}).some(k=>(x.pedido[k]||0)>(p.cores[k]||0))?'parcial':'';return}
@@ -257,6 +262,7 @@ function vInicio(){
   let h='';
   venc.forEach(x=>{const m=metaN(x);h+=`<div class="card alert ${m<0||x.dias<0?'bad':''}" onclick="ir('credito')"><b>${x.dias<0?'Nota vencida':m<0?'Passou da meta de 10 dias':m===0?'Meta de 10 dias: pagar hoje':'Meta de 10 dias: pagar em '+m+' dia'+(m>1?'s':'')}</b> · ${brl(x.valor)} (até ${dbr(metaD(x))})</div>`});
   h+=`<div class="card" onclick="ir('credito')"><div class="row sp"><div><div class="k">Crédito fornecedor · em aberto</div><div class="big">${brl(c.valorAberto)}</div></div><div style="text-align:right"><div class="k">Disponível</div><div class="mid">${kg(c.disponivel)}</div></div></div><div class="bar"><i style="width:${pct}%"></i></div><div class="mut" style="font-size:13px">${kg(c.usado)} usados de ${kg(c.limite)}</div></div>`;
+  if(D.user.dono&&D.nfCaixa)h+=`<div class="card" onclick="fCaixaNF()"><div class="row sp"><div><div class="k">Caixa da NF · a repassar</div><div class="mid">${brl(D.nfCaixa.saldo)}</div></div><div style="text-align:right"><div class="k">A receber</div><div class="mid">${brl(D.nfCaixa.aReceber)}</div></div></div></div>`;
   h+=`<div class="grid2"><div class="card" onclick="ir('estoque')"><div class="k">Estoque livre</div><div class="mid">${n0(D.inv.estoque.qtde-comprometido().qtde)} rolos</div><div class="mut">${n0(D.inv.estoque.qtde)} total · ${n0(comprometido().qtde)} comprometidos</div></div>
   <div class="card"><div class="k">A entregar</div><div class="mid">${pend.length} pedidos</div><div class="mut">${n0(pend.reduce((s,x)=>s+faltaEnt(x).qtde,0))} rolos</div></div>
   <div class="card"><div class="k">A receber</div><div class="mid">${brl(rec)}</div></div>
@@ -490,6 +496,8 @@ function fNF(i){
   <div class="cores" id="fnf">${cs.map(k=>`<div class="cor"><span><i class="dot" style="background:${COR_HEX[k]}"></i>${k} <small class="mut">de ${x.entregue[k]}</small></span><span class="step"><button type="button" onclick="stp(this,-1)">−</button><input inputmode="numeric" data-c="${k}" value="${x.entregue[k]}"><button type="button" onclick="stp(this,1)">+</button></span></div>`).join('')}</div>
   <div class="nfl" id="nftxt"></div>
   <button class="btn wa" onclick="enviaNF()">Enviar ao contador (WhatsApp)</button>
+  <button class="btn" onclick="cobraNF()">💰 Cobrar NF do cliente (1%)</button>
+  <div class="mut" id="nfpct" style="font-size:12.5px;text-align:center;margin-top:-4px"></div>
   <button class="btn sec" onclick="window.print()">PDF / imprimir</button>`);
   $('#fnf').addEventListener('input',textoNF);textoNF();
 }
@@ -501,12 +509,25 @@ function textoNF(){
   let tk=0,tv=0;const L=E.map(([c,n],j)=>{const kk=kks[j],vv=Math.round(kk*x.precoKg*100)/100;tk+=kk;tv+=vv;return `${n} ${c} — ${k2(kk)} KG — ${brl(vv)}`});
   let t=`Razão Social: ${cad.razao||x.cliente}\nCNPJ: ${cad.cnpj||'—'}\nInscrição Estadual: ${cad.ie||'—'}\n\nEndereço Completo\nCEP: ${cad.cep||'—'}\nCidade: ${[cad.cidade,cad.uf].filter(Boolean).join(' - ')||'—'}\nRua: ${cad.rua||'—'}${cad.bairro?'\nBairro: '+cad.bairro:''}\n\n`;
   t+=L.join('\n')+`\n------------------------------\nTOTAL — ${k2(Math.round(tk*100)/100)} KG — ${brl(Math.round(tv*100)/100)}\n\n(valor do kg ${k2(x.precoKg)})`;
-  $('#nftxt').textContent=t;NFX_T={t,tv:Math.round(tv*100)/100};
+  $('#nftxt').textContent=t;NFX_T={t,tv:Math.round(tv*100)/100};if($('#nfpct'))$('#nfpct').textContent='Valor da NF: '+brl(Math.round(NFX_T.tv*0.01*100)/100)+' (1% de '+brl(NFX_T.tv)+')';
 }
 let NFX_T=null;
+function docImg(titulo,t){const L=t.split('\n'),W=900,lh=34,c=document.createElement('canvas');c.width=W;c.height=120+L.length*lh;const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,W,c.height);
+  g.fillStyle='#111';g.font='bold 34px Georgia,serif';g.fillText(titulo,40,64);g.font='26px "Courier New",monospace';L.forEach((l,i)=>g.fillText(l,40,120+i*lh));return c.toDataURL('image/jpeg',.92).split(',')[1]}
+async function cobraNF(){const x=todas()[NFX];if(!NFX_T)return;const v=Math.round(NFX_T.tv*0.01*100)/100;
+  const msg=`Olá, ${x.cliente}! Segue a solicitação da nota fiscal:\n\n${NFX_T.t}\n\n*Valor da emissão da NF (1%): ${brl(v)}*`+PIX;
+  acao('nfRegistrar',{aba:x.aba,linha:x.linha,cliente:x.cliente,valorNota:NFX_T.tv},false);
+  await compartilha(msg,[docImg('Solicitação de nota fiscal',NFX_T.t)])}
+function fCaixaNF(){const C=D.nfCaixa||{saldo:0,aReceber:0,itens:[]},ar=C.itens.filter(x=>x.status==='A receber'),fe=C.itens.filter(x=>x.status!=='A receber').slice(0,25);
+  open_(`<h2>Caixa da NF</h2><p class="mut" style="margin-top:-4px">O 1% que o cliente paga pela nota. Não entra no lucro: é repassado.</p>
+  <div class="grid2"><div class="card"><div class="k">No caixa (a repassar)</div><div class="mid">${brl(C.saldo)}</div></div><div class="card"><div class="k">A receber dos clientes</div><div class="mid">${brl(C.aReceber)}</div></div></div>
+  ${ar.length?`<div class="k" style="margin:12px 4px 6px">A receber</div>`+ar.map(x=>`<div class="card"><div class="row sp"><div><b>${esc(x.cliente)}</b><div class="mut" style="font-size:12.5px">${dbr(x.data)} · nota de ${brl(x.nota)}</div></div><b>${brl(x.valor)}</b></div><button class="btn" style="margin-top:8px;padding:9px" onclick="acao('nfRecebido',{linha:${x.linha}})">Cliente pagou</button></div>`).join(''):''}
+  <label>Repassar (pagamento da NF)</label><div class="row" style="gap:8px"><input id="nfrep" inputmode="decimal" value="${String(C.saldo).replace('.',',')}" style="flex:1"><button class="btn" style="width:auto;margin:0;padding:10px 14px" onclick="const v=num(val('nfrep'));if(v>0&&confirm('Registrar repasse de '+brl(v)+'?'))acao('nfRepasse',{valor:v})">Repassei</button></div>
+  ${fe.length?`<div class="k" style="margin:14px 4px 6px">Histórico</div><div class="card">${fe.map(x=>`<div class="row sp" style="font-size:13px;margin:5px 0"><span>${dbr(x.em||x.data)} · ${esc(x.cliente)}</span><b style="color:${x.valor<0?'var(--bad)':'var(--ok)'}">${x.valor<0?'−'+brl(-x.valor):'+'+brl(x.valor)}</b></div>`).join('')}</div>`:''}`)}
 function enviaNF(){const x=todas()[NFX];if(!NFX_T)return;
   const msg='*Nota fiscal — '+x.cliente+'*\n\n'+NFX_T.t;
   acao('salvarNF',{aba:x.aba,linha:x.linha,tipo:x.tipo,cliente:x.cliente,valor:NFX_T.tv},false);
+  acao('nfRegistrar',{aba:x.aba,linha:x.linha,cliente:x.cliente,valorNota:NFX_T.tv},false);
   try{navigator.clipboard&&navigator.clipboard.writeText(msg)}catch(e){}
   window.open('https://wa.me/?text='+encodeURIComponent(msg),'_blank')}
 // ---- CLIENTES ----
