@@ -375,7 +375,7 @@ function fEntrega(i,resto){
 }
 function rolosOk(){return ROLOS.filter(r=>+r.kg>0).map(r=>({cor:r.cor||'',kg:+r.kg}))}
 function fotosOk(){return ROLOS.map(r=>r.foto).filter(Boolean)}
-function sEntrega(i){const x=todas()[i],p={aba:x.aba,linha:x.linha,data:val('fdt'),cores:lerCores('fc'),kg:num(val('fkg')),frete:num(val('ffr')),doEstoque:!x.doEstoque};
+function sEntrega(i){const x=todas()[i],p={aba:x.aba,linha:x.linha,data:val('fdt'),cores:lerCores('fc'),kg:num(val('fkg')),frete:num(val('ffr')),doEstoque:!x.doEstoque&&!(D.inv.retiradas||[]).some(r=>r.cliente===x.cliente&&r.data===val('fdt')&&(r.qtdEntregue||0)===Object.values(lerCores('fc')).reduce((a,b)=>a+(+b||0),0))};
   if(RESTO){const c=Object.assign({},x.entregue);for(const k in p.cores)c[k]=(c[k]||0)+p.cores[k];p.cores=c;p.kg=Math.round(((x.kgEntregue||0)+p.kg)*100)/100;p.frete=Math.round(((x.frete||0)+p.frete)*100)/100;p.coresParte=lerCores('fc');p.kgParte=num(val('fkg'));p.append=true;p.doEstoque=true}
   if(ROLOS.some(r=>r.st==='lendo'||r.st==='fila'))return toast('Espere terminar a leitura das fotos');
   if(ROLOS.length){p.rolos=rolosOk();p.fotos=fotosOk()}acao('registrarEntrega',p)}
@@ -743,11 +743,11 @@ function fCredito(){
 function vRelat(){
   const ms=meses(),dono=D.user.dono;
   const l=todas().filter(x=>!R.mes||x.mes===R.mes);
-  const by={};l.forEach(x=>{const b=by[x.cliente]=by[x.cliente]||{n:0,kg:0,v:0,rec:0,l:0};b.n++;b.kg+=x.kgEntregue||0;b.v+=totalV(x);b.rec+=aReceber(x);b.l+=x.lucro||0});
+  const by={};l.forEach(x=>{const b=by[x.cliente]=by[x.cliente]||{n:0,kg:0,v:0,rec:0,l:0};b.n++;b.kg+=x.kgEntregue||0;b.v+=valorV(x);b.f=(b.f||0)+(x.frete||0);b.rec+=aReceber(x);b.l+=x.lucro||0});
   const rows=Object.entries(by).sort((a,b)=>b[1].kg-a[1].kg);
-  const tot=rows.reduce((s,[,b])=>({kg:s.kg+b.kg,v:s.v+b.v,rec:s.rec+b.rec,l:s.l+b.l}),{kg:0,v:0,rec:0,l:0});
+  const tot=rows.reduce((s,[,b])=>({kg:s.kg+b.kg,v:s.v+b.v,rec:s.rec+b.rec,l:s.l+b.l,f:s.f+(b.f||0)}),{kg:0,v:0,rec:0,l:0,f:0});
   let h=`<select style="margin-bottom:10px" onchange="R.mes=this.value;render()"><option value="">Todos os meses</option>${ms.map(m=>`<option value="${m}" ${m===R.mes?'selected':''}>${mesNome(m)}</option>`).join('')}</select>
-  <div class="grid2"><div class="card"><div class="k">Kg entregue</div><div class="mid">${kg(tot.kg)}</div></div><div class="card"><div class="k">Faturado</div><div class="mid">${brl(tot.v)}</div></div>
+  <div class="grid2"><div class="card"><div class="k">Kg entregue</div><div class="mid">${kg(tot.kg)}</div></div><div class="card"><div class="k">Faturado (tecido)</div><div class="mid">${brl(tot.v)}</div>${tot.f?`<div class="mut" style="font-size:12px">+ ${brl(tot.f)} de frete (repassado)</div>`:''}</div>
   <div class="card"><div class="k">A receber</div><div class="mid">${brl(tot.rec)}</div></div>${dono?`<div class="card"><div class="k">Lucro</div><div class="mid" style="color:var(--ok)">${brl(tot.l)}</div></div>`:`<div class="card"><div class="k">Vendas</div><div class="mid">${l.length}</div></div>`}</div>
   <div class="card"><div class="k" style="margin-bottom:6px">Por cliente</div><table><tr><th>Cliente</th><th>Kg</th><th>Valor</th>${dono?'<th>Lucro</th>':'<th>A receber</th>'}</tr>
   ${rows.map(([c,b])=>`<tr><td>${esc(c)}</td><td>${n0(b.kg)}</td><td>${brl(b.v)}</td><td>${dono?brl(b.l):brl(b.rec)}</td></tr>`).join('')}</table></div>`;
