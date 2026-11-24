@@ -105,6 +105,19 @@ th{font-size:10.5px;color:var(--mut);text-transform:uppercase;font-weight:600;le
 #fv{position:fixed;inset:0;background:#000;z-index:70;display:flex;flex-direction:column}#fv img{flex:1;object-fit:contain;width:100%;min-height:0}#fv div{padding:12px;display:flex;gap:8px;background:#111}#fv input{flex:1}
 .nfl{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;white-space:pre-wrap;background:#141210;border:1px solid var(--line);border-radius:8px;padding:12px;margin-top:10px}
 @media print{body>*:not(#modal){display:none!important}#modal .sheet{position:static;background:#fff}#modal .sheet>div{max-height:none;background:#fff;color:#000;box-shadow:none}#modal button,#modal input,#modal label,.noprint{display:none!important}.nfl{background:#fff;color:#000;border:0;font-size:13px}}
+.tg{border:1px solid var(--line);background:#141210;color:var(--mut);border-radius:6px;padding:7px 10px;font:inherit;font-size:12px;font-weight:700;margin-bottom:12px}
+.hb{background:none;border:1px solid var(--line);border-radius:6px;padding:5px 9px;font-size:15px;margin-right:6px}
+.sw{width:42px;height:24px;border-radius:12px;background:#2a2620;border:1px solid var(--line);position:relative;flex:none;transition:.2s}.sw i{position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:var(--mut);transition:.2s}.sw.on{background:#3c5a2a;border-color:#4f7a36}.sw.on i{left:20px;background:#e8f3dc}
+.pl{display:flex;flex-wrap:wrap;gap:6px}.pl button{border:1px solid var(--line);background:var(--card);border-radius:6px;padding:7px 10px;color:var(--ink);font:inherit;font-size:13px}.pl button.on{background:var(--acc);color:var(--acc-ink);border-color:var(--acc);font-weight:700}.pl.hrs{display:grid;grid-template-columns:repeat(6,1fr)}.pl.hrs button{padding:7px 0}
+.chat{display:flex;flex-direction:column;gap:8px;padding-bottom:130px}
+.msg{max-width:88%;padding:10px 12px;border-radius:14px;font-size:14px;line-height:1.45}
+.msg.eu{align-self:flex-end;background:var(--acc);color:var(--acc-ink);border-bottom-right-radius:4px;font-weight:600}
+.msg.bot{align-self:flex-start;background:var(--card);border:1px solid var(--line);border-bottom-left-radius:4px}
+.msg.bot .ln{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid var(--line);font-size:13.5px}.msg.bot .ln:last-child{border:0}
+.msg.bot h4{margin:0 0 6px;font:800 15px var(--serif);color:var(--acc)}
+.cbar{position:fixed;left:0;right:0;bottom:calc(58px + env(safe-area-inset-bottom));z-index:6;background:#0c0b0a;border-top:1px solid var(--line);padding:8px 10px}
+.cbar .sg{display:flex;gap:6px;overflow-x:auto;margin-bottom:8px}.cbar .sg button{flex:none;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:16px;padding:6px 11px;font:inherit;font-size:12.5px}
+.cbar form{display:flex;gap:8px;max-width:640px;margin:0 auto}.cbar input{flex:1;border-radius:22px;padding:11px 16px}.cbar form button{border:0;border-radius:22px;background:var(--acc);color:var(--acc-ink);font:inherit;font-weight:700;padding:0 16px}
 </style>
 </head>
 <body>
@@ -117,7 +130,7 @@ th{font-size:10.5px;color:var(--mut);text-transform:uppercase;font-weight:600;le
   <p id="lerr" style="color:var(--bad)"></p>
 </div>
 <div id="app" style="display:none">
-  <header><div><h1>Tecido</h1><small id="sub"></small><span id="sync" class="sync"></span></div><button onclick="carregar(true)" style="background:none;border:1px solid var(--line);border-radius:6px;padding:6px 10px;color:var(--acc);font:inherit;font-size:12px">↻ Atualizar</button></header>
+  <header><div><h1>Tecido</h1><small id="sub"></small><span id="sync" class="sync"></span></div><div><button class="hb" aria-label="Assistente" onclick="ir('assist')">💬</button><button class="hb" aria-label="Avisos" onclick="ir('avisos')">🔔</button><button onclick="carregar(true)" style="background:none;border:1px solid var(--line);border-radius:6px;padding:6px 10px;color:var(--acc);font:inherit;font-size:12px">↻ Atualizar</button></div></header>
   <main id="view"></main>
   <nav>
     <button data-t="inicio" onclick="ir('inicio')"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Início</button>
@@ -152,7 +165,7 @@ const CK=()=>'tec_d_'+PIN;
 async function entrar(){PIN=$('#pin').value.trim();if(!PIN)return;await filaInicia();const cache=getStore(CK());
   if(cache){try{store('tec_pin',PIN);abrir();setD(JSON.parse(cache),true);carregar();return}catch(e){}}
   try{await call('login');store('tec_pin',PIN);abrir();carregar()}catch(e){$('#lerr').textContent=e.message;if(/PIN/.test(e.message))store('tec_pin')}}
-function abrir(){$('#login').style.display='none';$('#app').style.display='block';history.replaceState({t:TAB},'')}
+function abrir(){$('#login').style.display='none';$('#app').style.display='block';if(getStore('tec_push')==='1')cfgSW();history.replaceState({t:TAB},'')}
 let CARR=false,RAW=null,EXT=null,FILA=[],PEDE_EXT=false;
 const EK=()=>'tec_ext_'+PIN;
 function extLocal(){if(EXT)return EXT;try{EXT=JSON.parse(getStore(EK())||'null')}catch(e){EXT=null}return EXT}
@@ -222,7 +235,7 @@ function aplica(a,p){
   else if(a==='excluirEmpresa'){D.cadastro=(D.cadastro||[]).filter(z=>z.linha!==+p.linha)}
 }
 function ir(t){if(t!==TAB){TAB=t;history.pushState({t},'')}window.scrollTo(0,0);render()}
-function render(){if(!D)return;document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===TAB));const v=$('#view');let h='';try{h=({inicio:vInicio,vendas:vVendas,estoque:vEstoque,credito:vCredito,relat:vRelat,clientes:vClientes,sugestao:vSugestao})[TAB]()}catch(e){h='<p class="mut">Erro: '+esc(e.message)+'</p>'}v.innerHTML=vFila()+h}
+function render(){if(!D)return;document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===TAB));const v=$('#view');let h='';try{h=({avisos:vAvisos,assist:vAssist,inicio:vInicio,vendas:vVendas,estoque:vEstoque,credito:vCredito,relat:vRelat,clientes:vClientes,sugestao:vSugestao})[TAB]()}catch(e){h='<p class="mut">Erro: '+esc(e.message)+'</p>'}v.innerHTML=vFila()+h}
 // botão voltar do celular: fecha foto, câmera, janela; senão volta para a aba anterior
 let MST=[],SKIP=0;
 window.addEventListener('popstate',e=>{
@@ -763,6 +776,89 @@ function vRelat(){
 
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 (function(){const p=getStore('tec_pin');if(p){$('#pin').value=p;entrar()}$('#pin').addEventListener('keydown',e=>{if(e.key==='Enter')entrar()})})();
+
+/* ---------- AVISOS NO CELULAR ---------- */
+const b64bin=s=>{s=s.replace(/-/g,'+').replace(/_/g,'/');s+='='.repeat((4-s.length%4)%4);return Uint8Array.from(atob(s),c=>c.charCodeAt(0))};
+const pushOk=()=>'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;
+function pushAtivo(){return pushOk()&&Notification.permission==='granted'&&getStore('tec_push')==='1'}
+async function cfgSW(){try{const c=await caches.open('tec-cfg');await c.put('cfg',new Response(JSON.stringify({api:API,pin:PIN})))}catch(e){}}
+async function minhaInsc(){const reg=await navigator.serviceWorker.ready;return reg.pushManager.getSubscription()}
+async function ativarAvisos(){
+  if(!pushOk())return toast(/iphone|ipad/i.test(navigator.userAgent)?'No iPhone, abra o app pelo ícone da tela inicial':'Este navegador não aceita avisos');
+  try{const p=await Notification.requestPermission();if(p!=='granted')return toast('Avisos bloqueados. Libere nas configurações do celular.');
+    loading(true);const k=await call('pushKey',{},true);const reg=await navigator.serviceWorker.ready;
+    let s=await reg.pushManager.getSubscription();if(!s)s=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64bin(k.key)});
+    await call('pushSub',{sub:s.toJSON()},true);await cfgSW();store('tec_push','1');AVC=null;toast('Avisos ligados');render()}
+  catch(e){toast('Erro: '+e.message)}finally{loading(false)}}
+async function desativarAvisos(){try{const s=await minhaInsc();if(s){await call('pushDel',{endpoint:s.endpoint},true);await s.unsubscribe()}}catch(e){}store('tec_push');toast('Avisos desligados');render()}
+async function testarAviso(){try{const s=await minhaInsc();if(!s)return toast('Ligue os avisos de novo');loading(true);await call('avisoTeste',{endpoint:s.endpoint},true);toast('Aviso enviado — confira as notificações')}catch(e){toast('Erro: '+e.message)}finally{loading(false)}}
+const AVT=[['receber','💵','A receber','Quanto cada cliente deve',1],['entregar','🚚','Pedidos para entregar','O que falta entregar e há quanto tempo',0],['credito','🧾','Pagar fornecedor','Notas perto da meta de 10 dias',1],['estoque','📦','Estoque de rolos','Rolos livres e cores acabando',0]];
+const DSEM=['D','S','T','Q','Q','S','S'];
+let AVC=null,AVSUJO=false;
+async function avCarregar(){try{const s=await minhaInsc();if(!s)return;const r=await call('pushCfgGet',{endpoint:s.endpoint},true);if(r.cfg&&!AVSUJO){AVC=r.cfg;store('tec_avc',JSON.stringify(AVC));render()}}catch(e){}}
+function avTog(t){const c=AVC[t]=AVC[t]||{on:false,h:[9],d:[1,2,3,4,5,6]};c.on=!c.on;AVSUJO=true;render()}
+function avHora(t,h){const c=AVC[t],i=c.h.indexOf(h);if(i>=0)c.h.splice(i,1);else{if(c.h.length>=6)return toast('No máximo 6 horários por aviso');c.h.push(h)}c.h.sort((a,b)=>a-b);AVSUJO=true;render()}
+function avDia(t,d){const c=AVC[t];c.d=c.d||[0,1,2,3,4,5,6];const i=c.d.indexOf(d);if(i>=0){if(c.d.length===1)return;c.d.splice(i,1)}else c.d.push(d);AVSUJO=true;render()}
+async function avSalvar(){try{const s=await minhaInsc();if(!s)return toast('Ligue os avisos de novo');loading(true);await call('pushCfgSet',{endpoint:s.endpoint,cfg:AVC},true);store('tec_avc',JSON.stringify(AVC));AVSUJO=false;toast('Avisos salvos');render()}catch(e){toast('Erro: '+e.message)}finally{loading(false)}}
+function vAvisos(){
+  const vol=`<button class="tg" onclick="ir('inicio')">‹ Voltar</button>`;
+  if(!pushAtivo())return vol+`<div class="card"><div class="k">Avisos no celular</div><div class="mid" style="margin:6px 0">🔕 Desligados</div><p class="mut" style="margin:0;font-size:13.5px">Receba no horário que quiser: pedidos para entregar, estoque de rolos${D.user.dono?', quanto os clientes devem e as notas do fornecedor':''}.</p><button class="btn" onclick="ativarAvisos()">Ligar avisos</button></div>`;
+  if(!AVC){try{AVC=JSON.parse(getStore('tec_avc')||'null')}catch(e){}if(!AVC)AVC={};avCarregar()}
+  let h=vol+`<p class="mut" style="margin:0 4px 10px;font-size:13px">Ligue os avisos que quer receber, escolha os horários e os dias. Cada celular tem a sua escolha.</p>`;
+  AVT.filter(a=>!a[4]||D.user.dono).forEach(([t,ic,nome,desc])=>{const c=AVC[t]||{on:false,h:[],d:[1,2,3,4,5,6]},dias=c.d&&c.d.length?c.d:[0,1,2,3,4,5,6];
+    h+=`<div class="card"><div class="row sp" onclick="avTog('${t}')" style="cursor:pointer"><span><b style="font-size:15px">${ic} ${nome}</b><div class="mut" style="font-size:12px">${desc}</div></span><span class="sw${c.on?' on':''}"><i></i></span></div>`;
+    if(c.on)h+=`<div class="k" style="margin:12px 0 6px">Horários</div><div class="pl hrs">${Array.from({length:17},(_,i)=>i+6).map(x=>`<button class="${c.h.includes(x)?'on':''}" onclick="avHora('${t}',${x})">${x}h</button>`).join('')}</div>
+      <div class="k" style="margin:12px 0 6px">Dias</div><div class="pl">${DSEM.map((l,i)=>`<button class="${dias.includes(i)?'on':''}" style="min-width:36px" onclick="avDia('${t}',${i})">${l}</button>`).join('')}</div>${c.h.length?'':'<div style="color:var(--warn);font-size:12px;margin-top:6px">Escolha pelo menos um horário</div>'}`;
+    h+='</div>'});
+  h+=`<button class="btn" onclick="avSalvar()">${AVSUJO?'Salvar mudanças':'Salvo ✓'}</button><button class="btn sec" onclick="testarAviso()">Mandar um aviso agora</button><button class="btn sec" style="color:var(--mut);border-color:var(--line)" onclick="desativarAvisos()">Desligar todos os avisos</button>`;
+  return h}
+
+/* ---------- ASSISTENTE (responde na hora, com os dados do app) ---------- */
+let CH=null;
+const nrm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+function chLoad(){if(CH)return;try{CH=JSON.parse(getStore('tec_chat_'+PIN)||'[]')}catch(e){CH=[]}}
+function chSave(){store('tec_chat_'+PIN,JSON.stringify(CH.slice(-40)))}
+function sugestoes(){return (D.user.dono?['Quem me deve?']:[]).concat(['O que falta entregar?','Estoque de rolos','Vendas do mês']).concat(D.user.dono?['Crédito do fornecedor']:[]).concat(['Limpar conversa'])}
+function vAssist(){chLoad();
+  let h=`<button class="tg" onclick="ir('inicio')">‹ Voltar</button><div class="chat">`;
+  if(!CH.length)h+=`<div class="msg bot"><h4>Assistente do tecido</h4>Pergunte do seu jeito. Exemplos:<br>${D.user.dono?'• <b>quem me deve</b> ou <b>quanto o João deve</b><br>':''}• <b>o que falta entregar</b><br>• <b>estoque de preto</b><br>• <b>vendas do mês</b> ou <b>vendas da Sandy</b><br>• <b>Alexandre</b> (resumo do cliente)</div>`;
+  h+=CH.map(m=>`<div class="msg ${m.eu?'eu':'bot'}">${m.eu?esc(m.t):m.h}</div>`).join('')+'</div>';
+  h+=`<div class="cbar"><div class="sg">${sugestoes().map(t=>`<button onclick="pergAssist('${t}')">${t}</button>`).join('')}</div><form onsubmit="event.preventDefault();const i=$('#cq');const v=i.value;i.value='';pergAssist(v)"><input id="cq" placeholder="Pergunte algo…" autocomplete="off" enterkeyhint="send"><button>Enviar</button></form></div>`;
+  return h}
+function pergAssist(t){t=String(t||'').trim();if(!t)return;chLoad();
+  if(/^limpar( conversa)?$/i.test(t)){CH=[];chSave();render();return}
+  let r;try{r=responde(t)}catch(e){r='Não consegui montar a resposta ('+esc(e.message)+').'}
+  CH.push({eu:1,t});CH.push({h:r});chSave();render();requestAnimationFrame(()=>window.scrollTo(0,document.body.scrollHeight))}
+const lnA=(a,b)=>`<div class="ln"><span>${a}</span><span style="text-align:right;white-space:nowrap">${b||''}</span></div>`;
+function responde(t){
+  const q=nrm(t),dono=D.user.dono,T=todas();
+  const clis=[...new Set((D.clientes||[]).concat(T.map(x=>x.cliente)))].filter(Boolean);
+  const cli=clis.find(c=>{const n=nrm(c);return n.length>2&&new RegExp('\\b'+n.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b').test(q)});
+  const cores=Object.keys((D.inv.estoque||{}).cores||{}),cor=cores.find(c=>q.includes(nrm(c)));
+  const mesQ=/mes passado/.test(q)?(meses()[1]||''):ultimoMes();
+  if(/^(oi|ola|opa|bom dia|boa tarde|boa noite)\b/.test(q)&&q.length<18)return 'Olá! O que você quer saber? Use os botões aí embaixo ou escreva do seu jeito.';
+  if(/^ajuda$|o que (voce|vc) faz/.test(q))return '<h4>O que eu respondo</h4>'+(dono?'Quem deve e quanto · ':'')+'pedidos para entregar · estoque de rolos por cor · vendas do mês e por cliente · resumo de um cliente'+(dono?' · crédito do fornecedor':'')+'.';
+  if(dono&&/deve|receber|devendo|cobrar|pagou|pagar/.test(q)&&!/fornecedor|nota|credito/.test(q)){
+    const por={};T.forEach(x=>{const v=aReceber(x);if(v>0.01&&(!cli||x.cliente===cli))por[x.cliente]=(por[x.cliente]||0)+v});
+    const L=Object.entries(por).sort((a,b)=>b[1]-a[1]),tot=L.reduce((s,x)=>s+x[1],0);
+    if(!L.length)return cli?`${esc(cli)} não deve nada. ✅`:'Ninguém deve nada agora. ✅';
+    return `<h4>${cli?esc(cli)+' deve':'A receber'} ${brl(tot)}</h4>`+(cli?T.filter(x=>x.cliente===cli&&aReceber(x)>0.01).map(x=>lnA(`${dbr(x.dataEntrega||x.data)} · ${n0(x.qtdEntregue||x.qtdPedido)} rolos`,`<b>${brl(aReceber(x))}</b>`)).join(''):L.map(([c,v])=>lnA(esc(c),`<b>${brl(v)}</b>`)).join(''));
+  }
+  if(dono&&/credito|fornecedor|nota/.test(q)){const c=D.credito;
+    return `<h4>Crédito do fornecedor</h4>`+lnA('Em aberto',`<b>${brl(c.valorAberto)}</b>`)+lnA('Disponível',kg(c.disponivel))+(c.aberto||[]).slice(0,6).map(x=>{const m=metaN(x);return lnA(`Nota ${dbr(x.data)}`,`${brl(x.valor)} <span class="mut">${x.dias<0?'vencida':m<0?'passou da meta':m===0?'meta hoje':'meta em '+m+'d'}</span>`)}).join('')}
+  if(/entreg|pendente|falta/.test(q)){const P=pendentes().filter(x=>!cli||x.cliente===cli);
+    if(!P.length)return 'Nada para entregar'+(cli?' para '+esc(cli):'')+'. ✅';
+    return `<h4>${P.length} pedido${P.length>1?'s':''} para entregar</h4>`+P.map(x=>{const f=faltaEnt(x);return lnA(`${esc(x.cliente)} <span class="mut">${dbr(x.data)}</span>`,`${n0(f.qtde)} rolos <span class="mut">${esc(faltaTxt(f))}</span>`)}).join('')}
+  if(/estoque|rolo|livre/.test(q)||(cor&&!cli)){const e=D.inv.estoque,cp=comprometido();
+    const L=cores.filter(c=>!cor||c===cor).map(c=>[c,e.cores[c]||0,(e.cores[c]||0)-(cp.cores[c]||0)]);
+    return `<h4>Estoque${cor?' de '+esc(cor):''}: ${n0(L.reduce((s,x)=>s+x[1],0))} rolos</h4>`+L.map(([c,t,l])=>lnA(`<span class="dot" style="background:${COR_HEX[c]||'#888'};width:9px;height:9px"></span> ${esc(c)}`,`<b>${n0(t)}</b> <span class="mut">livre ${n0(l)}</span>`)).join('')}
+  if(/vend|comprou|compras|mes/.test(q)||cli){const V=T.filter(x=>x.mes===mesQ&&(!cli||x.cliente===cli)),rol=V.reduce((s,x)=>s+(x.tipo==='pronta'?x.qtdEntregue:x.qtdPedido||0),0),val=V.reduce((s,x)=>s+valorV(x),0);
+    let h=`<h4>${cli?esc(cli)+' · ':''}${mesNome(mesQ)}</h4>`+lnA('Pedidos',n0(V.length))+lnA('Rolos',n0(rol))+(dono?lnA('Valor',`<b>${brl(val)}</b>`):'');
+    if(cli){const ar=T.filter(x=>x.cliente===cli).reduce((s,x)=>s+aReceber(x),0),pe=pendentes().filter(x=>x.cliente===cli);if(dono)h+=lnA('Deve hoje',`<b>${brl(ar)}</b>`);h+=lnA('Para entregar',pe.length?pe.map(x=>n0(faltaEnt(x).qtde)+' rolos').join(', '):'nada')}
+    else{const por={};V.forEach(x=>por[x.cliente]=(por[x.cliente]||0)+(x.tipo==='pronta'?x.qtdEntregue:x.qtdPedido||0));h+='<div style="margin-top:6px"></div>'+Object.entries(por).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([c,n])=>lnA(esc(c),n0(n)+' rolos')).join('')}
+    return h}
+  return 'Não entendi essa. Tente '+(dono?'<b>quem me deve</b>, ':'')+'<b>o que falta entregar</b>, <b>estoque de preto</b> ou <b>vendas do mês</b>.';
+}
 </script>
 <div id="cfm"></div>
 <style>#cfm .sheet{z-index:45}.btn.bad{background:#7a2a1c;border-color:#9a3a26;color:#fbe4da}</style>
