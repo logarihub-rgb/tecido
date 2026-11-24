@@ -11,7 +11,7 @@
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <style>
 :root{--bg:#0f0e0d;--card:#1a1815;--card2:#221f1b;--ink:#ece4d4;--mut:#9a907c;--line:#2e2a24;--acc:#b8904f;--acc-ink:#15120e;--ok:#8fae6b;--warn:#d6a74a;--bad:#c4553b;--r:12px;--serif:"Playfair Display",Georgia,serif}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -19,8 +19,8 @@ html,body{margin:0;color:var(--ink);font:15px/1.45 Inter,-apple-system,BlinkMacS
 body{background:
  repeating-linear-gradient(45deg,rgba(255,255,255,.012) 0 2px,transparent 2px 6px),
  repeating-linear-gradient(-45deg,rgba(0,0,0,.25) 0 2px,transparent 2px 6px),
- radial-gradient(ellipse at top,#1d1a16 0%,#0f0e0d 60%);background-attachment:fixed;min-height:100vh}
-header{position:sticky;top:0;z-index:5;background:rgba(12,11,10,.96);backdrop-filter:blur(6px);color:var(--ink);padding:calc(12px + env(safe-area-inset-top)) 16px 10px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--acc)}
+ radial-gradient(ellipse at top,#1d1a16 0%,#0f0e0d 60%);background-repeat:no-repeat;background-color:var(--bg);min-height:100vh}
+header{position:sticky;top:0;z-index:5;background:rgba(12,11,10,.96);color:var(--ink);padding:calc(12px + env(safe-area-inset-top)) 16px 10px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--acc)}
 header h1{margin:0;font:800 20px/1 var(--serif);letter-spacing:4px;text-transform:uppercase;color:var(--acc)}
 header small{color:var(--mut);font-size:11px;letter-spacing:.5px}
 main{padding:14px 12px 100px;max-width:640px;margin:0 auto}
@@ -190,8 +190,8 @@ const somaC=c=>Object.values(c||{}).reduce((s,n)=>s+(+n||0),0);
 function achaV(aba,linha){return D.vendas.find(x=>x.aba===aba&&x.linha===+linha)}
 function achaR(linha){return (D.inv.retiradas||[]).find(x=>x.linha===+linha)}
 function baixaEst(cores,kgv){const e=D.inv.estoque;for(const k in cores){e.cores[k]=(e.cores[k]||0)-cores[k];e.qtde-=cores[k]}e.kg-=(+kgv||0)}
-function excluir(i){const x=todas()[i],q=x.tipo==='pronta'?x.qtdEntregue:x.qtdPedido;
-  if(!confirm(`Excluir ${x.tipo==='pronta'?'a retirada':'o pedido'} de ${x.cliente} de ${dbr(x.data)} (${n0(q)} rolos)? Isso não tem volta.`))return;
+async function excluir(i){const x=todas()[i],q=x.tipo==='pronta'?x.qtdEntregue:x.qtdPedido;
+  if(!await pergunta(`Excluir ${x.tipo==='pronta'?'a retirada':'o pedido'} de ${x.cliente} de ${dbr(x.data)} (${n0(q)} rolos)? Isso não tem volta.`))return;
   if(x.tipo==='pronta')acao('excluirRetirada',{linha:x.linha,cliente:x.cliente,data:x.data});else acao('excluirPedido',{aba:x.aba,linha:x.linha,cliente:x.cliente,data:x.data})}
 function aplica(a,p){
   if(/^nf(Recebido|Repasse|Registrar|SaldoInicial)$/.test(a)){const C=D.nfCaixa=D.nfCaixa||{saldo:0,aReceber:0,itens:[]};
@@ -322,7 +322,7 @@ function detV(i){
     ${dono?`<tr><td>Lucro</td><td style="color:var(--ok);font-weight:700">${brl(x.lucro)}</td></tr><tr><td>Fornecedor pago</td><td>${x.pagoFornecedor?'Sim':'Não'}</td></tr>`:''}</table></div>`;
   }
   const fe=x.dataEntrega?faltaEnt(x):null;
-  if(fe)h+=`<div class="card alert"><b>Falta entregar: ${faltaTxt(fe)}</b><div class="grid2" style="margin-top:10px"><button class="btn" style="margin:0" onclick="fEntrega(${i},true)">Entregar o restante</button><button class="btn sec" style="margin:0" onclick="if(confirm('Encerrar o pedido? O que falta não será mais entregue.'))acao('salvarExtras',{aba:'${esc(x.aba)}',linha:${x.linha},cliente:'${esc(x.cliente)}',status:'encerrado'})">Encerrar</button></div></div>`;
+  if(fe)h+=`<div class="card alert"><b>Falta entregar: ${faltaTxt(fe)}</b><div class="grid2" style="margin-top:10px"><button class="btn" style="margin:0" onclick="fEntrega(${i},true)">Entregar o restante</button><button class="btn sec" style="margin:0" onclick="(async()=>{if(await pergunta('Encerrar o pedido? O que falta não será mais entregue.'))acao('salvarExtras',{aba:'${esc(x.aba)}',linha:${x.linha},cliente:'${esc(x.cliente)}',status:'encerrado'})})()">Encerrar</button></div></div>`;
   const entregue=x.tipo==='pronta'||x.dataEntrega;
   if(entregue)h+=`<button class="btn wa" onclick="whatsV(${i},this)">WhatsApp + fotos${x.fotos&&x.fotos.length?' ('+x.fotos.length+')':''}</button>`;
   if(entregue)h+=`<div class="grid2"><button class="btn" style="margin:0" onclick="fPagto(${i})">Recebimento</button><button class="btn sec" style="margin:0" onclick="fNF(${i})">Nota fiscal</button></div>`;
@@ -355,9 +355,9 @@ function fPedido(i){
   $('#fc').addEventListener('input',up);$('#fpk').addEventListener('input',up);up();
 }
 const num=s=>{s=String(s==null?'':s).trim();if(s.includes(','))s=s.replace(/\./g,'').replace(',','.');return +s||0};
-function sPedido(aba,linha){const c=val('fcli').trim();if(!c)return toast('Informe o cliente');const cores=lerCores('fc');if(!Object.keys(cores).length)return toast('Informe os rolos');
+async function sPedido(aba,linha){const c=val('fcli').trim();if(!c)return toast('Informe o cliente');const cores=lerCores('fc');if(!Object.keys(cores).length)return toast('Informe os rolos');
   const P={aba,linha,cliente:c,data:val('fdt'),precoKg:num(val('fpk')),cores,recebido:val('frec')?num(val('frec')):''};
-  if(!linha){const ig=D.vendas.find(x=>x.cliente===c&&x.data===P.data&&D.cores.every(k=>(x.pedido[k]||0)===(cores[k]||0)));if(ig){if(!confirm('Já existe um pedido igual de '+c+' nesse dia. Lançar outro mesmo assim?'))return;P.forcar=true}}
+  if(!linha){const ig=D.vendas.find(x=>x.cliente===c&&x.data===P.data&&D.cores.every(k=>(x.pedido[k]||0)===(cores[k]||0)));if(ig){if(!await pergunta('Já existe um pedido igual de '+c+' nesse dia. Lançar outro mesmo assim?'))return;P.forcar=true}}
   acao('salvarPedido',P)}
 let ROLOS=[];
 function blocoFotos(i){return `<div class="card" style="margin-top:12px"><div class="row sp"><div><div class="k">Etiquetas dos rolos</div><div class="mut" style="font-size:12px">Lê o peso e a cor, uma foto por vez</div></div>
@@ -478,7 +478,7 @@ function fPagto(i){
   <div class="card"><table><tr><td>Total ${x.frete?'(com frete)':''}</td><td><b>${brl(tot)}</b></td></tr><tr><td>Já recebido</td><td>${brl(rec)}</td></tr><tr><td><b>Falta</b></td><td><b style="color:${fal>0.01?'var(--warn)':'var(--ok)'}">${brl(fal)}</b></td></tr></table></div>
   <label>Recebi agora (R$)</label><input id="frec" inputmode="decimal" value="${fal>0.01?String(fal.toFixed(2)).replace('.',','):''}">
   <button class="btn" onclick="const v=num(val('frec'));if(!v)return toast('Informe o valor');acao('pagamentoVenda',{tipo:'${x.tipo}',aba:'${esc(x.aba)}',linha:${x.linha},add:v})">Registrar recebimento</button>
-  <button class="btn sec" onclick="const v=prompt('Total já recebido (R$):','${String(rec).replace('.',',')}');if(v!==null)acao('pagamentoVenda',{tipo:'${x.tipo}',aba:'${esc(x.aba)}',linha:${x.linha},total:num(v)})">Corrigir total recebido</button>`);
+  <button class="btn sec" onclick="(async()=>{const v=await pedeValor('Total já recebido (R$):','${String(rec).replace('.',',')}');if(v!==null)acao('pagamentoVenda',{tipo:'${x.tipo}',aba:'${esc(x.aba)}',linha:${x.linha},total:num(v)})})()">Corrigir total recebido</button>`);
 }
 // ---- NOTA FISCAL (documento para o contador) ----
 function kgMedio(x,cor){const r=(x.rolos||[]).filter(z=>z.cor===cor&&+z.kg>0);if(r.length)return r.reduce((s,z)=>s+ +z.kg,0)/r.length;return x.qtdEntregue?x.kgEntregue/x.qtdEntregue:D.padrao.kgRolo}
@@ -522,7 +522,7 @@ function fCaixaNF(){const C=D.nfCaixa||{saldo:0,aReceber:0,itens:[]},ar=C.itens.
   open_(`<h2>Caixa da NF</h2><p class="mut" style="margin-top:-4px">O 1% que o cliente paga pela nota. Não entra no lucro: é repassado.</p>
   <div class="grid2"><div class="card"><div class="k">No caixa (a repassar)</div><div class="mid">${brl(C.saldo)}</div></div><div class="card"><div class="k">A receber dos clientes</div><div class="mid">${brl(C.aReceber)}</div></div></div>
   ${ar.length?`<div class="k" style="margin:12px 4px 6px">A receber</div>`+ar.map(x=>`<div class="card"><div class="row sp"><div><b>${esc(x.cliente)}</b><div class="mut" style="font-size:12.5px">${dbr(x.data)} · nota de ${brl(x.nota)}</div></div><b>${brl(x.valor)}</b></div><button class="btn" style="margin-top:8px;padding:9px" onclick="acao('nfRecebido',{linha:${x.linha}})">Cliente pagou</button></div>`).join(''):''}
-  <label>Repassar (pagamento da NF)</label><div class="row" style="gap:8px"><input id="nfrep" inputmode="decimal" value="${String(C.saldo).replace('.',',')}" style="flex:1"><button class="btn" style="width:auto;margin:0;padding:10px 14px" onclick="const v=num(val('nfrep'));if(v>0&&confirm('Registrar repasse de '+brl(v)+'?'))acao('nfRepasse',{valor:v})">Repassei</button></div>
+  <label>Repassar (pagamento da NF)</label><div class="row" style="gap:8px"><input id="nfrep" inputmode="decimal" value="${String(C.saldo).replace('.',',')}" style="flex:1"><button class="btn" style="width:auto;margin:0;padding:10px 14px" onclick="(async()=>{const v=num(val('nfrep'));if(v>0&&await pergunta('Registrar repasse de '+brl(v)+'?'))acao('nfRepasse',{valor:v})})()">Repassei</button></div>
   ${fe.length?`<div class="k" style="margin:14px 4px 6px">Histórico</div><div class="card">${fe.map(x=>`<div class="row sp" style="font-size:13px;margin:5px 0"><span>${dbr(x.em||x.data)} · ${esc(x.cliente)}</span><b style="color:${x.valor<0?'var(--bad)':'var(--ok)'}">${x.valor<0?'−'+brl(-x.valor):'+'+brl(x.valor)}</b></div>`).join('')}</div>`:''}`)}
 function enviaNF(){const x=todas()[NFX];if(!NFX_T)return;
   const msg='*Nota fiscal — '+x.cliente+'*\n\n'+NFX_T.t;
@@ -551,7 +551,7 @@ function fCliente(nome,j){
   <div class="grid2"><div>${f('cidade','Cidade')}</div><div>${f('uf','UF')}</div></div>${f('tel','Telefone')}${f('obs','Observação')}
   <button class="btn" onclick="sCliente()">Salvar cadastro</button>
   ${nome&&es.length&&!nova?`<button class="btn sec" onclick="fCliente('${esc(nome)}','nova')">+ Adicionar outro CNPJ</button>`:''}
-  ${nome&&es.length>1&&!nova?`<button class="btn sec" style="color:var(--bad);border-color:#6a2f20" onclick="if(confirm('Remover o CNPJ ${esc(x.cnpj)} de ${esc(nome)}?'))acao('excluirEmpresa',{cliente:'${esc(nome)}',linha:${x.linha}})">Remover este CNPJ</button>`:''}`)}
+  ${nome&&es.length>1&&!nova?`<button class="btn sec" style="color:var(--bad);border-color:#6a2f20" onclick="(async()=>{if(await pergunta('Remover o CNPJ ${esc(x.cnpj)} de ${esc(nome)}?'))acao('excluirEmpresa',{cliente:'${esc(nome)}',linha:${x.linha}})})()">Remover este CNPJ</button>`:''}`)}
 async function lerCartao(file){
   const cnpj=val('cl_cnpj').replace(/\D/g,'');if(!file&&cnpj.length!==14)return toast('Digite o CNPJ completo ou leia o cartão');
   $('#clres').textContent=file?'Lendo o cartão…':'Buscando na Receita…';
@@ -572,8 +572,8 @@ function fRetirada(i){
   <div class="grid2"><div><label>Quilos (peso real)</label><input id="fkg" inputmode="decimal" value="${x&&x.kgEntregue?String(x.kgEntregue).replace('.',','):''}"></div><div><label>Frete do cliente (R$)</label><input id="ffr" inputmode="decimal" value="${x&&x.frete?String(x.frete).replace('.',','):''}" placeholder="0,00"></div></div>
   <button class="btn" onclick="sRet(${x?x.linha:''})">Salvar retirada</button>${x?`<button class="btn wa" onclick="whatsForm(${i},this)">WhatsApp + fotos</button>`:''}`);
 }
-function sRet(linha){const c=val('fcli').trim();if(!c)return toast('Informe o cliente');const cores=lerCores('fc');
-  for(const k in cores){const e=D.inv.estoque.cores[k]||0;if(!linha&&cores[k]>e&&!confirm(`Estoque de ${k} é ${e}. Lançar mesmo assim?`))return}
+async function sRet(linha){const c=val('fcli').trim();if(!c)return toast('Informe o cliente');const cores=lerCores('fc');
+  for(const k in cores){const e=D.inv.estoque.cores[k]||0;if(!linha&&cores[k]>e&&!await pergunta(`Estoque de ${k} é ${e}. Lançar mesmo assim?`))return}
   if(ROLOS.some(r=>r.st==='lendo'||r.st==='fila'))return toast('Espere terminar a leitura das fotos');
   const p={linha,cliente:c,data:val('fdt'),cores,kg:num(val('fkg')),precoKg:num(val('fpk')),frete:num(val('ffr'))};if(ROLOS.length){p.rolos=rolosOk();p.fotos=fotosOk()}
   acao('novaRetirada',p)}
@@ -631,7 +631,7 @@ function sChegada(i){const p=D.inv.pedidos[i],P={linha:p.linha,data:val('fdt'),d
   acao('receberFornecedor',P)}
 function fReceber(i,resto){
   const p=D.inv.pedidos[i];NFV=null;FRESTO=!!resto;const ff=faltaF(p);
-  open_(`<h2>${resto?'Restante':'Chegada'} · ${esc(p.protocolo)}</h2><p class="mut">Pedido de ${dbr(p.data)} · ${n0(p.qtdPedido)} rolos${p.dataEntrega?' · já chegaram '+n0(p.qtdEntregue):''}</p>${!resto&&p.dataEntrega&&ff?`<div class="card alert"><b>Falta chegar: ${faltaTxt(ff)}</b><div class="grid2" style="margin-top:10px"><button class="btn" style="margin:0" onclick="fReceber(${i},true)">Receber o restante</button><button class="btn sec" style="margin:0" onclick="if(confirm('Encerrar? O que falta não vem mais.'))acao('encerrarFornecedor',{linha:${p.linha}})">Encerrar</button></div></div>`:''}
+  open_(`<h2>${resto?'Restante':'Chegada'} · ${esc(p.protocolo)}</h2><p class="mut">Pedido de ${dbr(p.data)} · ${n0(p.qtdPedido)} rolos${p.dataEntrega?' · já chegaram '+n0(p.qtdEntregue):''}</p>${!resto&&p.dataEntrega&&ff?`<div class="card alert"><b>Falta chegar: ${faltaTxt(ff)}</b><div class="grid2" style="margin-top:10px"><button class="btn" style="margin:0" onclick="fReceber(${i},true)">Receber o restante</button><button class="btn sec" style="margin:0" onclick="(async()=>{if(await pergunta('Encerrar? O que falta não vem mais.'))acao('encerrarFornecedor',{linha:${p.linha}})})()">Encerrar</button></div></div>`:''}
   <div class="card" style="margin-top:10px"><div class="row sp"><div><div class="k">Nota fiscal do fornecedor</div><div class="mut" style="font-size:12px" id="nfres">Foto ou PDF da nota: preenche os quilos e a data de faturamento</div></div><label class="btn" style="width:auto;margin:0;padding:10px 12px;cursor:pointer">📄 Ler nota<input type="file" accept="image/*,application/pdf" style="display:none" onchange="lerNF(this.files[0]);this.value=''"></label></div></div>
   <label>Data que chegou</label><input id="fdt" type="date" value="${resto?hoje():(p.dataEntrega||hoje())}">
   <label>${resto?'Rolos que chegaram agora':'Rolos recebidos por cor'}</label>${coresInput('fc',resto?ff.cores:(p.qtdEntregue?p.entregue:p.pedido))}
@@ -639,7 +639,7 @@ function fReceber(i,resto){
   <label>Data da nota (faturamento)</label><input id="fnf" type="date" value="${resto?hoje():(p.dataEntrega||hoje())}">
   <p class="mut" id="fcrinfo" style="font-size:13px"></p>
   <button class="btn" onclick="sChegada(${i})">Salvar chegada</button>
-  <button class="btn sec" style="color:var(--bad);border-color:#6a2f20" onclick="if(confirm('Excluir o pedido ao fornecedor de ${dbr(p.data)} (${n0(p.qtdPedido)} rolos)? Isso não tem volta.'))acao('excluirPedidoFornecedor',{linha:${p.linha},data:'${p.data}'})">Excluir pedido do fornecedor</button>`);
+  <button class="btn sec" style="color:var(--bad);border-color:#6a2f20" onclick="(async()=>{if(await pergunta('Excluir o pedido ao fornecedor de ${dbr(p.data)} (${n0(p.qtdPedido)} rolos)? Isso não tem volta.'))acao('excluirPedidoFornecedor',{linha:${p.linha},data:'${p.data}'})})()">Excluir pedido do fornecedor</button>`);
   const pk=p.preco||D.padrao.custoKg||0,up=()=>{const k=num(val('fkg')),nf=val('fnf');const v=nf?dbr(new Date(new Date(nf+'T12:00').getTime()+15*864e5).toISOString().slice(0,10)):'';
     $('#fcrinfo').textContent=NFV&&NFV.valor?`Entra no crédito sozinho: ${brl(NFV.valor)} (valor da nota) · ${kg(k)} · vence ${v}`:k?`Entra no crédito sozinho: ${kg(k)}${pk?' × '+brl(pk)+' = '+brl(k*pk):''} · vence ${v}`:'O crédito do fornecedor é lançado sozinho com os quilos recebidos.'};
   FRUP=up;$('#fkg').addEventListener('input',up);$('#fnf').addEventListener('input',up);up();
@@ -676,7 +676,7 @@ function entregasJanela(dias){const ini=addD(hoje(),-dias),L=[];
   D.vendas.forEach(x=>{if(x.dataEntrega&&x.dataEntrega>=ini&&!INTERNO.test(x.cliente))L.push({cli:x.cliente,data:x.dataEntrega,cores:x.entregue||{}})});
   (D.inv.retiradas||[]).forEach(x=>{if(!x.baixa&&x.data>=ini&&!INTERNO.test(x.cliente))L.push({cli:x.cliente,data:x.data,cores:x.entregue||{}})});
   const fo=D.fora||[];return L.filter(e=>fo.indexOf(e.cli)<0)}
-function foraProj(c,f){if(f&&!confirm('Tirar '+c+' da projeção? As compras dele deixam de contar até você voltar com ele.'))return;acao('foraProjecao',{cliente:c,fora:!!f},false)}
+async function foraProj(c,f){if(f&&!await pergunta('Tirar '+c+' da projeção? As compras dele deixam de contar até você voltar com ele.'))return;acao('foraProjecao',{cliente:c,fora:!!f},false)}
 function sugestao(){
   const W=SG.sem,dias=W*7,L=entregasJanela(dias),cores=D.cores;
   // prazo do fornecedor (pedido → chegada) e confiabilidade por cor nos últimos pedidos
@@ -758,11 +758,23 @@ function vRelat(){
   // por cor
   const bc={};l.forEach(x=>{for(const k in x.entregue||{})bc[k]=(bc[k]||0)+x.entregue[k]});
   h+=`<div class="card"><div class="k" style="margin-bottom:6px">Rolos entregues por cor</div><table>${D.cores.filter(k=>bc[k]).sort((a,b)=>bc[b]-bc[a]).map(k=>`<tr><td><span class="dot" style="background:${COR_HEX[k]}"></span> ${k}</td><td>${bc[k]}</td></tr>`).join('')}</table></div>`;
-  return h+`<button class="btn sec" onclick="if(confirm('Recalcular o histórico dos meses fechados? Use só se você mudou meses antigos direto na planilha.'))acao('recalcular',{},false)">Recalcular histórico</button><button class="btn sec" onclick="if(FILA.length&&!confirm('Tem lançamentos ainda não enviados. Sair mesmo assim?'))return;store('tec_pin');location.reload()">Sair</button>`;
+  return h+`<button class="btn sec" onclick="(async()=>{if(await pergunta('Recalcular o histórico dos meses fechados? Use só se você mudou meses antigos direto na planilha.'))acao('recalcular',{},false)})()">Recalcular histórico</button><button class="btn sec" onclick="(async()=>{if(FILA.length&&!await pergunta('Tem lançamentos ainda não enviados. Sair mesmo assim?'))return;store('tec_pin');location.reload()})()">Sair</button>`;
 }
 
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 (function(){const p=getStore('tec_pin');if(p){$('#pin').value=p;entrar()}$('#pin').addEventListener('keydown',e=>{if(e.key==='Enter')entrar()})})();
+</script>
+<div id="cfm"></div>
+<style>#cfm .sheet{z-index:45}.btn.bad{background:#7a2a1c;border-color:#9a3a26;color:#fbe4da}</style>
+<script>
+// diálogos próprios (o confirm/prompt do celular pode ser bloqueado no app instalado)
+function pergunta(msg,sim,perigo){return new Promise(res=>{const el=document.getElementById('cfm'),e=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  el.innerHTML=`<div class="sheet" id="cfmb"><div><h2>Confirmar</h2><p style="font-size:15px;margin:4px 0 0">${e(msg)}</p><button class="btn${perigo?' bad':''}" id="cfok">${e(sim||'Confirmar')}</button><button class="btn sec" id="cfno">Cancelar</button></div></div>`;
+  const fim=v=>{el.innerHTML='';res(v)};document.getElementById('cfok').onclick=()=>fim(true);document.getElementById('cfno').onclick=()=>fim(false);document.getElementById('cfmb').onclick=ev=>{if(ev.target.id==='cfmb')fim(false)}})}
+function pedeValor(msg,ini){return new Promise(res=>{const el=document.getElementById('cfm'),e=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  el.innerHTML=`<div class="sheet" id="cfmb"><div><h2>Informe</h2><p style="font-size:14px;margin:4px 0 10px">${e(msg)}</p><input id="cfv" value="${e(ini)}"><button class="btn" id="cfok">OK</button><button class="btn sec" id="cfno">Cancelar</button></div></div>`;
+  const v=()=>document.getElementById('cfv').value,fim=x=>{el.innerHTML='';res(x)};document.getElementById('cfok').onclick=()=>fim(v());document.getElementById('cfno').onclick=()=>fim(null);document.getElementById('cfv').onkeydown=ev=>{if(ev.key==='Enter')fim(v())};setTimeout(()=>{const i=document.getElementById('cfv');if(i){i.focus();i.select()}},60)})}
+if('serviceWorker' in navigator){const tinha=!!navigator.serviceWorker.controller;let rec=false;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(!tinha||rec)return;rec=true;const m=document.getElementById('modal');if(!(m&&m.innerHTML)&&!document.getElementById('cfm').innerHTML)location.reload()})}
 </script>
 </body>
 </html>
