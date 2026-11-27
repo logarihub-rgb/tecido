@@ -241,7 +241,7 @@ let MST=[],SKIP=0;
 window.addEventListener('popstate',e=>{
   if(SKIP){SKIP--;return}
   if($('#fv')){$('#fv').remove();return}
-  if($('#cam')){fecharCamera();return}
+  if($('#cam')){fecharCamera();setTimeout(fimLeitura,250);return}
   if(MST.length){MST.pop();if(MST.length){mostra(MST[MST.length-1])}else{fecharCamera();$('#modal').innerHTML=''}return}
   if(e.state&&e.state.t){TAB=e.state.t;window.scrollTo(0,0);render()}
 });
@@ -388,7 +388,7 @@ function fEntrega(i,resto){
 }
 function rolosOk(){return ROLOS.filter(r=>+r.kg>0).map(r=>({cor:r.cor||'',kg:+r.kg}))}
 function fotosOk(){return ROLOS.map(r=>r.foto).filter(Boolean)}
-function sEntrega(i){const x=todas()[i],p={aba:x.aba,linha:x.linha,data:val('fdt'),cores:lerCores('fc'),kg:num(val('fkg')),frete:num(val('ffr')),doEstoque:!x.doEstoque&&!(D.inv.retiradas||[]).some(r=>r.cliente===x.cliente&&r.data===val('fdt')&&(r.qtdEntregue||0)===Object.values(lerCores('fc')).reduce((a,b)=>a+(+b||0),0))};
+function sEntrega(i){if(precisaConferir())return;const x=todas()[i],p={aba:x.aba,linha:x.linha,data:val('fdt'),cores:lerCores('fc'),kg:num(val('fkg')),frete:num(val('ffr')),doEstoque:!x.doEstoque&&!(D.inv.retiradas||[]).some(r=>r.cliente===x.cliente&&r.data===val('fdt')&&(r.qtdEntregue||0)===Object.values(lerCores('fc')).reduce((a,b)=>a+(+b||0),0))};
   if(RESTO){const c=Object.assign({},x.entregue);for(const k in p.cores)c[k]=(c[k]||0)+p.cores[k];p.cores=c;p.kg=Math.round(((x.kgEntregue||0)+p.kg)*100)/100;p.frete=Math.round(((x.frete||0)+p.frete)*100)/100;p.coresParte=lerCores('fc');p.kgParte=num(val('fkg'));p.append=true;p.doEstoque=true}
   if(ROLOS.some(r=>r.st==='lendo'||r.st==='fila'))return toast('Espere terminar a leitura das fotos');
   if(ROLOS.length){p.rolos=rolosOk();p.fotos=fotosOk()}acao('registrarEntrega',p)}
@@ -401,8 +401,29 @@ async function ocrWorker(i){let r;
     for(;;){r.tent++;try{const res=await post('ocr',{img:r.b64,foto:r.foto||''});const o=res.r||{};if(o.foto)r.foto=o.foto;if(o.cor&&!r.cor)r.cor=o.cor;if(o.kg){r.kg=o.kg;r.st='ok';break}throw new Error(o.erro||'Não achei o peso')}
       catch(e){if(r.tent<3){await new Promise(z=>setTimeout(z,800+Math.random()*700));continue}r.st='ver';r.err=e.message;break}}
     desenhaRolos(i);camThumbs()}
-  OCR_ON--}
+  OCR_ON--;if(!OCR_ON)fimLeitura()}
 async function addFotos(files,i){for(const f of [...files]){try{lerRolo(await reduzir(f),i)}catch(e){toast('Foto inválida')}}}
+// ---- CONFERÊNCIA: mostra cada foto com o peso lido, o Manuel confirma ou corrige ----
+function precisaConferir(){if(!ROLOS.length)return false;if(ROLOS.some(r=>r.st==='lendo'||r.st==='fila')){toast('Espere terminar a leitura das fotos');return true}
+  if(ROLOS.every(r=>r.conf))return false;toast('Confira cada foto antes de salvar');conferir();return true}
+function fimLeitura(){if(!ROLOS.length||$('#cam')||$('#fv')||!$('#frolos'))return;if(ROLOS.some(r=>r.st==='lendo'||r.st==='fila'))return;if(ROLOS.some(r=>!r.conf))conferir()}
+let CJ=0;
+function conferir(j){if(j==null){j=ROLOS.findIndex(r=>!r.conf);if(j<0)j=0}const r=ROLOS[j];if(!r)return;CJ=j;
+  let d=$('#fv');if(!d){d=document.createElement('div');d.id='fv';document.body.appendChild(d);history.pushState({fv:1},'')}
+  const k=+r.kg||0,fora=k&&(k<15||k>23),n=ROLOS.length,feitos=ROLOS.filter(x=>x.conf).length;
+  d.innerHTML=`<div style="display:block;padding:12px 14px;background:#111"><b>Foto ${j+1} de ${n}</b> <span class="mut">· ${feitos} conferida${feitos===1?'':'s'}</span>${r.conf?' <span style="color:var(--ok)">✓</span>':''}</div>
+  ${r.b64?`<img src="data:image/jpeg;base64,${r.b64}">`:'<div style="flex:1"></div>'}
+  <div style="display:block;padding:12px;background:#111">
+   <div style="font-size:15px;margin-bottom:8px">${k?`Li <b>${kg(k)}</b>${r.cor?' · <b>'+esc(r.cor)+'</b>':''}. Está certo?`:'Não consegui ler o peso. Digite abaixo.'}</div>
+   ${fora?'<div style="color:var(--bad);font-size:13px;margin-bottom:8px">⚠ Peso fora do normal (15 a 23 kg). Confira com atenção.</div>':''}
+   <div style="display:flex;gap:8px;padding:0;background:none"><select id="cfcor" style="flex:1"><option value="">Cor?</option>${D.cores.map(c=>`<option ${c===r.cor?'selected':''}>${c}</option>`).join('')}</select><input id="cfkg" inputmode="decimal" placeholder="kg" value="${k?String(k).replace('.',','):''}"></div>
+   <div style="display:flex;gap:8px;padding:0;margin-top:10px;background:none"><button class="btn sec" style="margin:0;flex:1" onclick="conferir(${Math.max(0,j-1)})">← Anterior</button><button class="btn" style="margin:0;flex:2" onclick="confOk()">✓ Certo · próxima</button></div>
+   <div class="mut" style="font-size:12px;margin-top:6px">Se estiver errado, corrija a cor ou o peso antes de tocar em Certo.</div></div>`}
+function confOk(){const r=ROLOS[CJ],k=num(val('cfkg')),c=val('cfcor');if(!(k>0))return toast('Digite o peso');if(!c)return toast('Escolha a cor');
+  r.kg=k;r.cor=c;r.st='ok';r.conf=true;
+  let nx=ROLOS.findIndex((x,i)=>i>CJ&&!x.conf);if(nx<0)nx=ROLOS.findIndex(x=>!x.conf);
+  if(nx>=0)return conferir(nx);
+  history.back();desenhaRolos();toast('Todas as fotos conferidas · '+kg(ROLOS.reduce((s,x)=>s+(+x.kg||0),0)))}
 function verFoto(j){const r=ROLOS[j];if(!r||!r.b64)return;const d=document.createElement('div');d.id='fv';
   d.innerHTML=`<img src="data:image/jpeg;base64,${r.b64}"><div><input id="fvkg" inputmode="decimal" placeholder="Peso líquido (kg)" value="${r.kg?String(r.kg).replace('.',','):''}"><button class="btn" style="width:auto;margin:0" onclick="const v=num($('#fvkg').value);if(v){ROLOS[${j}].kg=v;ROLOS[${j}].st='ok'}history.back();desenhaRolos()">OK</button></div>`;
   document.body.appendChild(d);history.pushState({fv:1},'');setTimeout(()=>{const e=$('#fvkg');if(e)e.focus()},200)}
@@ -436,7 +457,7 @@ function fecharCamera(){if(CAM){CAM.getTracks().forEach(t=>t.stop());CAM=null}co
 let LASTI=-1;
 function desenhaRolos(i){
   if(i===undefined)i=LASTI;LASTI=i;const el=$('#frolos');if(!el)return;
-  el.innerHTML=ROLOS.map((r,j)=>{const ag=r.st==='lendo'||r.st==='fila',ruim=r.st==='ver';return `<div class="rolo">${r.thumb?`<img src="${r.thumb}" onclick="verFoto(${j})">`:'<div></div>'}
+  el.innerHTML=ROLOS.map((r,j)=>{const ag=r.st==='lendo'||r.st==='fila',ruim=r.st==='ver';return `<div class="rolo">${r.thumb?`<img src="${r.thumb}" onclick="conferir(${j})" style="${r.conf?'outline:2px solid var(--ok)':''}">`:'<div></div>'}
   <select onchange="ROLOS[${j}].cor=this.value;somaRolos()"><option value="">${r.st==='lendo'?'Lendo…':r.st==='fila'?'Na fila…':'Cor?'}</option>${D.cores.map(c=>`<option ${c===r.cor?'selected':''}>${c}</option>`).join('')}</select>
   <input inputmode="decimal" value="${r.kg?String(r.kg).replace('.',','):''}" placeholder="${ag?'…':ruim?'digite':'kg'}" oninput="ROLOS[${j}].kg=num(this.value);if(ROLOS[${j}].kg)ROLOS[${j}].st='ok';somaRolos()" style="${ruim&&!r.kg?'border-color:var(--bad)':''}">
   <span class="ac">${ruim&&!r.kg?`<button onclick="verFoto(${j})" title="Ver foto">👁</button><button onclick="tentaDeNovo(${j},${i})" title="Ler de novo">↻</button>`:''}<button class="x" onclick="ROLOS.splice(${j},1);desenhaRolos(${i})">×</button></span></div>`}).join('');
@@ -471,15 +492,25 @@ async function compartilha(t,b64s){
   window.open('https://wa.me/?text='+encodeURIComponent(t),'_blank');
   if(files.length)toast('Este celular não envia fotos direto. Texto copiado.');
 }
-function whatsForm(i,btn){const x=todas()[i],k=num(val('fkg'));if(!k)return toast('Informe os quilos');
-  const b=ROLOS.filter(r=>r.b64).map(r=>r.b64);
+function whatsForm(i,btn){if(precisaConferir())return;const x=todas()[i],k=num(val('fkg'));if(!k)return toast('Informe os quilos');
+  const b=ROLOS.filter(r=>r.b64).map(r=>r.b64),ids=ROLOS.map(r=>r.foto).filter(Boolean);
   const rec=RESTO?Math.max(0,Math.round(((x.recebido||0)-totalV(x))*100)/100):(x.recebido||0);
-  compartilha(msgCliente(x,{cores:lerCores('fc'),kg:k,preco:x.precoKg||num(val('fpk')),frete:num(val('ffr')),rec,data:val('fdt'),fotos:b.length,resto:RESTO}),b)}
+  const t=msgCliente(x,{cores:lerCores('fc'),kg:k,preco:x.precoKg||num(val('fpk')),frete:num(val('ffr')),rec,data:val('fdt'),fotos:b.length,resto:RESTO});
+  if(ids.length)return enviaComLink(t,ids,x.cliente,btn,b);compartilha(t,b)}
+// fotos vão por link (pasta no Drive, aberta por 90 dias) em vez de anexar cada foto
+const LINKS={};
+async function enviaComLink(t,ids,cli,btn,b64s){const key=ids.join(',');
+  if(LINKS[key])return compartilha(t+LINKS[key],[]);
+  const txt0=btn?btn.textContent:'';if(btn){btn.textContent='Gerando link das fotos…';btn.disabled=true}
+  try{const r=(await call('linkFotos',{ids,cliente:cli},true)).r;LINKS[key]='\n\n📷 Fotos das etiquetas (link válido por 90 dias):\n'+r.url;
+    if(btn){btn.disabled=false;btn.textContent='Enviar agora';btn.onclick=()=>compartilha(t+LINKS[key],[])}else compartilha(t+LINKS[key],[])}
+  catch(e){if(btn){btn.disabled=false;btn.textContent=txt0}toast('Não consegui gerar o link: '+e.message);if(b64s&&b64s.length&&btn){btn.textContent='Enviar com as fotos';btn.onclick=()=>compartilha(t,b64s)}}}
 let FOTOS_CACHE={};
 async function whatsV(i,btn){const x=todas()[i];
   const o={cores:x.entregue,kg:x.kgEntregue,preco:x.precoKg,frete:x.frete,rec:x.recebido||0,data:x.data||x.dataEntrega,fotos:(x.fotos||[]).length};
   const t=msgCliente(x,o),ids=x.fotos||[];
   if(!ids.length)return compartilha(t,[]);
+  return enviaComLink(t,ids,x.cliente,btn);
   const key=ids.join(',');
   if(FOTOS_CACHE[key]){return compartilha(t,FOTOS_CACHE[key])}
   btn.textContent='Baixando fotos…';btn.disabled=true;
