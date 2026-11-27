@@ -374,7 +374,7 @@ async function sPedido(aba,linha){const c=val('fcli').trim();if(!c)return toast(
   acao('salvarPedido',P)}
 let ROLOS=[];
 function blocoFotos(i){return `<div class="card" style="margin-top:12px"><div class="row sp"><div><div class="k">Etiquetas dos rolos</div><div class="mut" style="font-size:12px">Lê o peso e a cor, uma foto por vez</div></div>
-  <div class="row"><button class="btn" style="width:auto;margin:0;padding:10px 12px" onclick="abrirCamera(${i})">📷 Câmera</button><label class="btn sec" style="width:auto;margin:0;padding:10px 12px;cursor:pointer">🖼<input type="file" accept="image/*" multiple style="display:none" onchange="addFotos(this.files,${i});this.value=''"></label></div></div>
+  <div class="row"><button class="btn sec" style="width:auto;margin:0;padding:10px 12px" onclick="falaRolos(${i})" title="Falar cor e peso">🎤</button><button class="btn" style="width:auto;margin:0;padding:10px 12px" onclick="abrirCamera(${i})">📷 Câmera</button><label class="btn sec" style="width:auto;margin:0;padding:10px 12px;cursor:pointer">🖼<input type="file" accept="image/*" multiple style="display:none" onchange="addFotos(this.files,${i});this.value=''"></label></div></div>
   <div class="rolos" id="frolos"></div><div id="ftot"></div></div>`}
 let RESTO=false;
 function fEntrega(i,resto){
@@ -417,13 +417,35 @@ function conferir(j){if(j==null){j=ROLOS.findIndex(r=>!r.conf);if(j<0)j=0}const 
    <div style="font-size:15px;margin-bottom:8px">${k?`Li <b>${kg(k)}</b>${r.cor?' · <b>'+esc(r.cor)+'</b>':''}. Está certo?`:'Não consegui ler o peso. Digite abaixo.'}</div>
    ${fora?'<div style="color:var(--bad);font-size:13px;margin-bottom:8px">⚠ Peso fora do normal (15 a 23 kg). Confira com atenção.</div>':''}
    <div style="display:flex;gap:8px;padding:0;background:none"><select id="cfcor" style="flex:1"><option value="">Cor?</option>${D.cores.map(c=>`<option ${c===r.cor?'selected':''}>${c}</option>`).join('')}</select><input id="cfkg" inputmode="decimal" placeholder="kg" value="${k?String(k).replace('.',','):''}"></div>
-   <div style="display:flex;gap:8px;padding:0;margin-top:10px;background:none"><button class="btn sec" style="margin:0;flex:1" onclick="conferir(${Math.max(0,j-1)})">← Anterior</button><button class="btn" style="margin:0;flex:2" onclick="confOk()">✓ Certo · próxima</button></div>
-   <div class="mut" style="font-size:12px;margin-top:6px">Se estiver errado, corrija a cor ou o peso antes de tocar em Certo.</div></div>`}
+   <div style="display:flex;gap:8px;padding:0;margin-top:10px;background:none"><button class="btn sec" style="margin:0;flex:1" onclick="conferir(${Math.max(0,j-1)})">← Anterior</button><button class="btn sec" style="margin:0;flex:0 0 58px;font-size:20px" onclick="falaConf()" title="Falar">🎤</button><button class="btn" style="margin:0;flex:2" onclick="confOk()">✓ Certo · próxima</button></div>
+   <div class="mut" style="font-size:12px;margin-top:6px">Se estiver errado, toque no 🎤 e fale (ex.: “Preto 19,10”) ou corrija à mão. Falar “certo” confirma.</div></div>`}
 function confOk(){const r=ROLOS[CJ],k=num(val('cfkg')),c=val('cfcor');if(!(k>0))return toast('Digite o peso');if(!c)return toast('Escolha a cor');
   r.kg=k;r.cor=c;r.st='ok';r.conf=true;
   let nx=ROLOS.findIndex((x,i)=>i>CJ&&!x.conf);if(nx<0)nx=ROLOS.findIndex(x=>!x.conf);
   if(nx>=0)return conferir(nx);
   history.back();desenhaRolos();toast('Todas as fotos conferidas · '+kg(ROLOS.reduce((s,x)=>s+(+x.kg||0),0)))}
+// ---- VOZ: fala "Preto 19,10 Marfim 18,97" e o app preenche ----
+const semA=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+function falar(cb){const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR)return toast('Este celular não aceita voz aqui. Use o microfone do teclado.');
+  const r=new SR();r.lang='pt-BR';r.interimResults=false;r.maxAlternatives=3;
+  r.onresult=e=>cb([...e.results[0]].map(a=>a.transcript));r.onerror=e=>toast(e.error==='no-speech'?'Não ouvi nada':'Não deu para ouvir ('+e.error+')');
+  try{r.start();toast('🎤 Pode falar…')}catch(e){toast('Microfone ocupado, tente de novo')}}
+function lerFala(t){t=semA(t).replace(/(\d+)\s*(virgula|ponto|,|\.)\s*(\d+)/g,'$1.$3').replace(/\b(quilos?|kg|kilos?)\b/g,' ');
+  const cores=D.cores.map(c=>[semA(c),c]).concat([['azul','Marinho'],['off','Marfim'],['marrom','Marrom'],['marron','Marrom']]);
+  const out=[];let cor=null;for(const k of (t.match(/[a-z]+|\d+(?:\.\d+)?/g)||[])){const c=cores.find(([n])=>n===k);if(c){cor=c[1];continue}
+    if(/^\d/.test(k)){const v=+k;if(v>0&&v<100){out.push({cor,kg:Math.round(v*100)/100});cor=null}}}
+  return out}
+function melhor(alts){for(const a of alts){const p=lerFala(a);if(p.length)return {p,txt:a}}return {p:[],txt:alts[0]||''}}
+function falaConf(){falar(alts=>{const {p,txt}=melhor(alts);
+  if(!p.length){if(/certo|ok|confere|isso|correto|sim/.test(semA(txt)))return confOk();return toast('Não entendi: “'+txt+'”')}
+  const a=p[0];if(a.cor)$('#cfcor').value=a.cor;$('#cfkg').value=String(a.kg).replace('.',',');
+  p.slice(1).forEach((b,n)=>{const r=ROLOS[CJ+1+n];if(r){r.kg=b.kg;if(b.cor)r.cor=b.cor;r.st='ok'}});
+  toast('Ouvi: '+p.map(x=>(x.cor||'')+' '+String(x.kg).replace('.',',')).join(' · ')+' — toque em Certo')})}
+function falaRolos(i){falar(alts=>{const {p,txt}=melhor(alts);if(!p.length)return toast('Não entendi: “'+txt+'”');
+  const sem=p.filter(x=>!x.cor);if(sem.length)return toast('Fale a cor antes de cada peso (ex.: Preto 19,10)');
+  p.forEach(x=>ROLOS.push({kg:x.kg,cor:x.cor,st:'ok',conf:true}));desenhaRolos(i);
+  toast(p.length+' rolo'+(p.length>1?'s':'')+' por voz: '+p.map(x=>x.cor+' '+String(x.kg).replace('.',',')).join(' · '))})}
 function verFoto(j){const r=ROLOS[j];if(!r||!r.b64)return;const d=document.createElement('div');d.id='fv';
   d.innerHTML=`<img src="data:image/jpeg;base64,${r.b64}"><div><input id="fvkg" inputmode="decimal" placeholder="Peso líquido (kg)" value="${r.kg?String(r.kg).replace('.',','):''}"><button class="btn" style="width:auto;margin:0" onclick="const v=num($('#fvkg').value);if(v){ROLOS[${j}].kg=v;ROLOS[${j}].st='ok'}history.back();desenhaRolos()">OK</button></div>`;
   document.body.appendChild(d);history.pushState({fv:1},'');setTimeout(()=>{const e=$('#fvkg');if(e)e.focus()},200)}
