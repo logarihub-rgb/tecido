@@ -110,6 +110,7 @@ th{font-size:10.5px;color:var(--mut);text-transform:uppercase;font-weight:600;le
 .sw{width:42px;height:24px;border-radius:12px;background:#2a2620;border:1px solid var(--line);position:relative;flex:none;transition:.2s}.sw i{position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:var(--mut);transition:.2s}.sw.on{background:#3c5a2a;border-color:#4f7a36}.sw.on i{left:20px;background:#e8f3dc}
 .pl{display:flex;flex-wrap:wrap;gap:6px}.pl button{border:1px solid var(--line);background:var(--card);border-radius:6px;padding:7px 10px;color:var(--ink);font:inherit;font-size:13px}.pl button.on{background:var(--acc);color:var(--acc-ink);border-color:var(--acc);font-weight:700}.pl.hrs{display:grid;grid-template-columns:repeat(6,1fr)}.pl.hrs button{padding:7px 0}
 .chat{display:flex;flex-direction:column;gap:8px;padding-bottom:130px}
+.hb.mas{padding:1px 4px;vertical-align:middle}.hb.mas svg{width:28px;height:28px;display:block}.bav{display:flex;gap:8px;align-items:flex-end}.bav svg{width:30px;height:30px;flex:none}
 .msg{max-width:88%;padding:10px 12px;border-radius:14px;font-size:14px;line-height:1.45}
 .msg.eu{align-self:flex-end;background:var(--acc);color:var(--acc-ink);border-bottom-right-radius:4px;font-weight:600}
 .msg.bot{align-self:flex-start;background:var(--card);border:1px solid var(--line);border-bottom-left-radius:4px}
@@ -130,7 +131,7 @@ th{font-size:10.5px;color:var(--mut);text-transform:uppercase;font-weight:600;le
   <p id="lerr" style="color:var(--bad)"></p>
 </div>
 <div id="app" style="display:none">
-  <header><div><h1>Tecido</h1><small id="sub"></small><span id="sync" class="sync"></span></div><div><button class="hb" aria-label="Assistente" onclick="ir('assist')">💬</button><button class="hb" aria-label="Avisos" onclick="ir('avisos')">🔔</button><button onclick="carregar(true)" style="background:none;border:1px solid var(--line);border-radius:6px;padding:6px 10px;color:var(--acc);font:inherit;font-size:12px">↻ Atualizar</button></div></header>
+  <header><div><h1>Tecido</h1><small id="sub"></small><span id="sync" class="sync"></span></div><div><button class="hb mas" aria-label="Assistente" onclick="ir('assist')"><span id="masc"></span></button><button class="hb" aria-label="Avisos" onclick="ir('avisos')">🔔</button><button onclick="carregar(true)" style="background:none;border:1px solid var(--line);border-radius:6px;padding:6px 10px;color:var(--acc);font:inherit;font-size:12px">↻ Atualizar</button></div></header>
   <main id="view"></main>
   <nav>
     <button data-t="inicio" onclick="ir('inicio')"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Início</button>
@@ -872,10 +873,12 @@ const nrm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036
 function chLoad(){if(CH)return;try{CH=JSON.parse(getStore('tec_chat_'+PIN)||'[]')}catch(e){CH=[]}}
 function chSave(){store('tec_chat_'+PIN,JSON.stringify(CH.slice(-40)))}
 function sugestoes(){return (D.user.dono?['Quem me deve?']:[]).concat(['O que falta entregar?','Estoque de rolos','Vendas do mês']).concat(D.user.dono?['Crédito do fornecedor']:[]).concat(['Limpar conversa'])}
+function mascote(cl){return`<svg viewBox="0 0 100 100" ${cl?`class="${cl}"`:""} aria-hidden="true"><circle cx="50" cy="50" r="48" fill="#1d1a14" stroke="#c9a24d" stroke-width="4"/><line x1="50" y1="14" x2="50" y2="24" stroke="#c9a24d" stroke-width="3"/><circle cx="50" cy="12" r="4.5" fill="#f0c95c"/><rect x="24" y="24" width="52" height="42" rx="14" fill="#c9a24d"/><rect x="31" y="32" width="38" height="24" rx="9" fill="#14120e"/><circle cx="42" cy="44" r="5" fill="#7fe3c4"/><circle cx="58" cy="44" r="5" fill="#7fe3c4"/><path d="M44 51 Q50 55 56 51" stroke="#7fe3c4" stroke-width="2.2" fill="none" stroke-linecap="round"/><path d="M30 70 h40 l-4 14 h-32z" fill="#c9a24d"/><path d="M42 72 L50 82 L58 72" stroke="#14120e" stroke-width="3" fill="none"/></svg>`}
+(function(){const m=document.getElementById('masc');if(m)m.outerHTML=mascote()})();
 function vAssist(){chLoad();
   let h=`<button class="tg" onclick="ir('inicio')">‹ Voltar</button><div class="chat">`;
-  if(!CH.length)h+=`<div class="msg bot"><h4>Assistente do tecido</h4>Pergunte do seu jeito. Exemplos:<br>${D.user.dono?'• <b>quem me deve</b> ou <b>quanto o João deve</b><br>':''}• <b>o que falta entregar</b><br>• <b>estoque de preto</b><br>• <b>vendas do mês</b> ou <b>vendas da Sandy</b><br>• <b>Alexandre</b> (resumo do cliente)</div>`;
-  h+=CH.map(m=>`<div class="msg ${m.eu?'eu':'bot'}">${m.eu?esc(m.t):m.h}</div>`).join('')+'</div>';
+  if(!CH.length)h+=`<div class="bav">${mascote()}<div class="msg bot"><h4>Assistente do tecido</h4>Pergunte do seu jeito. Exemplos:<br>${D.user.dono?'• <b>quem me deve</b> ou <b>quanto o João deve</b><br>':''}• <b>o que falta entregar</b><br>• <b>estoque de preto</b><br>• <b>vendas do mês</b> ou <b>vendas da Sandy</b><br>• <b>Alexandre</b> (resumo do cliente)</div></div>`;
+  h+=CH.map(m=>m.eu?`<div class="msg eu">${esc(m.t)}</div>`:`<div class="bav">${mascote()}<div class="msg bot">${m.h}</div></div>`).join('')+'</div>';
   h+=`<div class="cbar"><div class="sg">${sugestoes().map(t=>`<button onclick="pergAssist('${t}')">${t}</button>`).join('')}</div><form onsubmit="event.preventDefault();const i=$('#cq');const v=i.value;i.value='';pergAssist(v)"><input id="cq" placeholder="Pergunte algo…" autocomplete="off" enterkeyhint="send"><button>Enviar</button></form></div>`;
   return h}
 function pergAssist(t){t=String(t||'').trim();if(!t)return;chLoad();
